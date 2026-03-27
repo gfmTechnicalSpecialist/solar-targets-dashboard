@@ -7,7 +7,7 @@ import { Moon } from 'lucide-react';
 const SignIn: React.FC = () => {
   const { signIn } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,17 +17,17 @@ const SignIn: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!email.trim() || !password.trim()) {
-      setError('Please enter both email and password.');
+    if (!username.trim() || !password.trim()) {
+      setError('Please enter both username and password.');
       return;
     }
 
     setLoading(true);
-    const success = await signIn(email, password);
+    const result = await signIn(username, password);
     setLoading(false);
 
-    if (!success) {
-      setError('Invalid email or password.');
+    if (!result.success) {
+      setError(result.error || 'Sign in failed.');
     }
   };
 
@@ -57,14 +57,14 @@ const SignIn: React.FC = () => {
           )}
 
           <div className="signin-field">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="username">Username</label>
             <input
-              id="email"
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              id="username"
+              type="text"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
               autoFocus
             />
           </div>
@@ -100,12 +100,6 @@ const SignIn: React.FC = () => {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-
-        <div className="signin-footer">
-          <p>Demo credentials:</p>
-          <code>admin@momentum.group / admin123</code>
-          <code>exec@momentum.group / exec123</code>
-        </div>
       </div>
     </div>
   );

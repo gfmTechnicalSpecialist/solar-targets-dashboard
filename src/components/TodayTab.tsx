@@ -1,62 +1,164 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Sun,
   Zap,
   TrendingUp,
-  BatteryCharging,
   Clock3,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from 'recharts';
+import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
+import { fetchTodaySolarData, type PowerDataPoint } from '../api/higeco';
+
+interface ChartPoint {
+  time: string;
+  powerKw: number;
+}
+
+interface AllSitesChartPoint {
+  time: string;
+  parcDuCapKw: number | undefined;
+  centurionKw: number | undefined;
+}
+
+function toChartData(points: PowerDataPoint[]): ChartPoint[] {
+  return points.map((p) => {
+    const d = new Date(p.timestamp * 1000);
+    const hh = d.getHours().toString().padStart(2, '0');
+    const mm = d.getMinutes().toString().padStart(2, '0');
+    return { time: `${hh}:${mm}`, powerKw: p.powerKw };
+  });
+}
+
+function toAllSitesChartData(pdc: PowerDataPoint[], cen: PowerDataPoint[]): AllSitesChartPoint[] {
+  // Floor timestamps to the start of each minute so both sites align.
+  // Deduplicate within each site by keeping the last value per minute.
+  const floorToMin = (ts: number) => Math.floor(ts / 60) * 60;
+
+  const pdcByMin = new Map<number, number>();
+  for (const p of pdc) pdcByMin.set(floorToMin(p.timestamp), p.powerKw);
+
+  const cenByMin = new Map<number, number>();
+  for (const p of cen) cenByMin.set(floorToMin(p.timestamp), p.powerKw);
+
+  // Collect all unique minutes from both sites
+  const allMinutes = new Set<number>([...pdcByMin.keys(), ...cenByMin.keys()]);
+
+  return Array.from(allMinutes)
+    .sort((a, b) => a - b)
+    .map((ts) => {
+      const d = new Date(ts * 1000);
+      const hh = d.getHours().toString().padStart(2, '0');
+      const mm = d.getMinutes().toString().padStart(2, '0');
+      return {
+        time: `${hh}:${mm}`,
+        parcDuCapKw: pdcByMin.get(ts),
+        centurionKw: cenByMin.get(ts),
+      };
+    });
+}
 
 const TodayTab: React.FC = () => {
-  const { siteData } = useSite();
-  const { currentMetrics, hourlyData } = siteData;
-  const totalSolarToday = hourlyData.reduce((s, h) => s + h.solarKw, 0);
-  const totalLoadToday = hourlyData.reduce((s, h) => s + h.loadKw, 0);
-  const peakHour = hourlyData.reduce((max, h) => (h.solarKw > max.solarKw ? h : max), hourlyData[0]);
-  const selfConsumed = hourlyData.reduce((s, h) => s + Math.min(h.solarKw, h.loadKw), 0);
-  const selfConsumptionRate = Math.round((selfConsumed / Math.max(totalSolarToday, 1)) * 100);
+  const { user } = useAuth();
+  const { siteId, siteLabel } = useSite();
+  const [data, setData] = useState<ChartPoint[]>([]);
+  const [allSitesData, setAllSitesData] = useState<AllSitesChartPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const activeSite: 'parc-du-cap' | 'centurion' =
+    siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
+  const isAllSites = siteId === 'all';
+
+  const loadData = useCallback(async () => {
+    if (!user?.token) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (isAllSites) {
+        const [pdc, cen] = await Promise.all([
+          fetchTodaySolarData(user.token, 'parc-du-cap'),
+          fetchTodaySolarData(user.token, 'centurion'),
+        ]);
+        setAllSitesData(toAllSitesChartData(pdc, cen));
+        setData([]);
+      } else {
+        const raw = await fetchTodaySolarData(user.token, activeSite);
+        setData(toChartData(raw));
+        setAllSitesData([]);
+      }
+      setLastUpdated(new Date());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.token, siteId, activeSite, isAllSites]);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const chartPoints = isAllSites ? allSitesData : data;
+  const sampleHours = chartPoints.length > 1 ? 300 / 3600 : 0;
+
+  // KPI helpers for single-site
+  const currentOutput = data.length > 0 ? data[data.length - 1].powerKw : 0;
+  const peakPoint = data.reduce<ChartPoint | null>(
+    (max, p) => (!max || p.powerKw > max.powerKw ? p : max),
+    null
+  );
+  const estimatedEnergy = (data.reduce((s, p) => s + p.powerKw, 0) * sampleHours).toFixed(1);
+
+  // KPI helpers for all-sites (handle undefined from sparse data)
+  const pdcLast = allSitesData.length > 0 ? [...allSitesData].reverse().find(p => p.parcDuCapKw !== undefined) : undefined;
+  const cenLast = allSitesData.length > 0 ? [...allSitesData].reverse().find(p => p.centurionKw !== undefined) : undefined;
+  const pdcCurrent = pdcLast?.parcDuCapKw ?? 0;
+  const cenCurrent = cenLast?.centurionKw ?? 0;
+  const pdcPeak = allSitesData.reduce<AllSitesChartPoint | null>(
+    (max, p) => (!max || (p.parcDuCapKw ?? 0) > (max.parcDuCapKw ?? 0) ? p : max), null);
+  const cenPeak = allSitesData.reduce<AllSitesChartPoint | null>(
+    (max, p) => (!max || (p.centurionKw ?? 0) > (max.centurionKw ?? 0) ? p : max), null);
+  const pdcEnergy = (allSitesData.reduce((s, p) => s + (p.parcDuCapKw ?? 0), 0) * sampleHours).toFixed(1);
+  const cenEnergy = (allSitesData.reduce((s, p) => s + (p.centurionKw ?? 0), 0) * sampleHours).toFixed(1);
+
   const currentHour = new Date().getHours();
   const isGenerating = currentHour >= 6 && currentHour <= 19;
 
   const PowerTooltip = ({ active, payload, label }: any) => {
     if (active && payload?.length) {
-      const solar = payload.find((p: any) => p.dataKey === 'solarKw')?.value ?? 0;
-      const load = payload.find((p: any) => p.dataKey === 'loadKw')?.value ?? 0;
+      if (isAllSites) {
+        const pdcRaw = payload.find((p: any) => p.dataKey === 'parcDuCapKw')?.value;
+        const cenRaw = payload.find((p: any) => p.dataKey === 'centurionKw')?.value;
+        const pdc = typeof pdcRaw === 'number' ? pdcRaw : null;
+        const cen = typeof cenRaw === 'number' ? cenRaw : null;
+        return (
+          <div className="custom-tooltip">
+            <p className="tooltip-title">{label}</p>
+            <p style={{ color: 'var(--chart-solar)' }}>Parc du Cap: {pdc !== null ? `${pdc.toFixed(1)} kW` : '—'}</p>
+            <p style={{ color: 'var(--chart-load-solar)' }}>Centurion: {cen !== null ? `${cen.toFixed(1)} kW` : '—'}</p>
+            <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Combined: {((pdc ?? 0) + (cen ?? 0)).toFixed(1)} kW</p>
+          </div>
+        );
+      }
       return (
         <div className="custom-tooltip">
           <p className="tooltip-title">{label}</p>
-          <p style={{ color: 'var(--chart-solar)' }}>Solar: {solar} kW</p>
-          <p style={{ color: 'var(--chart-load)' }}>Load: {load} kW</p>
-          <p style={{ color: solar >= load ? 'var(--success)' : 'var(--danger)', fontWeight: 700, marginTop: 4 }}>
-            Net: {(solar - load).toFixed(1)} kW
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const NetTooltip = ({ active, payload, label }: any) => {
-    if (active && payload?.length) {
-      const net = payload[0]?.value ?? 0;
-      return (
-        <div className="custom-tooltip">
-          <p className="tooltip-title">{label}</p>
-          <p style={{ color: net >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-            {net >= 0 ? 'Export' : 'Import'}: {Math.abs(net)} kW
+          <p style={{ color: 'var(--chart-solar)' }}>
+            Power: {payload[0].value.toFixed(1)} kW
           </p>
         </div>
       );
@@ -70,23 +172,128 @@ const TodayTab: React.FC = () => {
         <div>
           <p className="page-kicker">Real-Time</p>
           <h1>Today</h1>
-          <p className="page-subtitle">Live performance monitoring for today's solar generation</p>
+          <p className="page-subtitle">
+            Live solar generation — {siteId === 'all' ? 'All Sites' : siteLabel} (Total Active Power)
+          </p>
         </div>
-        <div className={`status-indicator ${isGenerating ? 'status-on-track' : 'status-behind'}`}>
-          {isGenerating ? <Sun size={14} /> : <Clock3 size={14} />}
-          {isGenerating ? 'Generating' : 'After Hours'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {lastUpdated && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            onClick={loadData}
+            disabled={loading}
+            style={{
+              background: 'var(--surface-hover)',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'var(--text-secondary)',
+              fontSize: '0.8rem',
+            }}
+          >
+            <RefreshCw size={14} className={loading ? 'spin' : ''} />
+            Refresh
+          </button>
+          <div className={`status-indicator ${isGenerating ? 'status-on-track' : 'status-behind'}`}>
+            {isGenerating ? <Sun size={14} /> : <Clock3 size={14} />}
+            {isGenerating ? 'Generating' : 'After Hours'}
+          </div>
         </div>
       </section>
 
-      {/* Today KPIs */}
+      {error && (
+        <section style={{
+          padding: '12px 16px',
+          background: 'var(--danger-bg, rgba(239,68,68,0.1))',
+          borderRadius: 8,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          color: 'var(--danger)',
+          fontSize: '0.85rem',
+          marginBottom: 16,
+        }}>
+          <AlertTriangle size={16} />
+          {error}
+        </section>
+      )}
+
+      {/* KPIs */}
+      {isAllSites ? (
+        <section className="overview-kpi-grid today-kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
+              <Sun size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading ? '—' : `${pdcEnergy} kWh`}</div>
+              <div className="overview-kpi-label">Parc du Cap — Est. Energy</div>
+            </div>
+          </article>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--info-bg)', color: 'var(--info)' }}>
+              <Zap size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading ? '—' : `${pdcCurrent.toFixed(1)} kW`}</div>
+              <div className="overview-kpi-label">Parc du Cap — Latest</div>
+            </div>
+          </article>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+              <TrendingUp size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading || !pdcPeak ? '—' : `${(pdcPeak.parcDuCapKw ?? 0).toFixed(1)} kW`}</div>
+              <div className="overview-kpi-label">Parc du Cap — Peak{pdcPeak ? ` @ ${pdcPeak.time}` : ''}</div>
+            </div>
+          </article>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
+              <Sun size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading ? '—' : `${cenEnergy} kWh`}</div>
+              <div className="overview-kpi-label">Centurion — Est. Energy</div>
+            </div>
+          </article>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--info-bg)', color: 'var(--info)' }}>
+              <Zap size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading ? '—' : `${cenCurrent.toFixed(1)} kW`}</div>
+              <div className="overview-kpi-label">Centurion — Latest</div>
+            </div>
+          </article>
+          <article className="overview-kpi-tile">
+            <div className="overview-kpi-icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+              <TrendingUp size={20} />
+            </div>
+            <div>
+              <div className="overview-kpi-value">{loading || !cenPeak ? '—' : `${(cenPeak.centurionKw ?? 0).toFixed(1)} kW`}</div>
+              <div className="overview-kpi-label">Centurion — Peak{cenPeak ? ` @ ${cenPeak.time}` : ''}</div>
+            </div>
+          </article>
+        </section>
+      ) : (
       <section className="overview-kpi-grid today-kpi-grid">
         <article className="overview-kpi-tile">
           <div className="overview-kpi-icon" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
             <Sun size={20} />
           </div>
           <div>
-            <div className="overview-kpi-value">{currentMetrics.todayProduction} kWh</div>
-            <div className="overview-kpi-label">Production</div>
+            <div className="overview-kpi-value">
+              {loading ? '—' : `${estimatedEnergy} kWh`}
+            </div>
+            <div className="overview-kpi-label">Est. Energy Today</div>
           </div>
         </article>
 
@@ -95,8 +302,10 @@ const TodayTab: React.FC = () => {
             <Zap size={20} />
           </div>
           <div>
-            <div className="overview-kpi-value">{currentMetrics.currentGeneration} kW</div>
-            <div className="overview-kpi-label">Current Output</div>
+            <div className="overview-kpi-value">
+              {loading ? '—' : `${currentOutput.toFixed(1)} kW`}
+            </div>
+            <div className="overview-kpi-label">Latest Reading</div>
           </div>
         </article>
 
@@ -105,121 +314,170 @@ const TodayTab: React.FC = () => {
             <TrendingUp size={20} />
           </div>
           <div>
-            <div className="overview-kpi-value">{currentMetrics.peakGeneration} kW</div>
-            <div className="overview-kpi-label">Peak @ {peakHour.hour}</div>
+            <div className="overview-kpi-value">
+              {loading || !peakPoint ? '—' : `${peakPoint.powerKw.toFixed(1)} kW`}
+            </div>
+            <div className="overview-kpi-label">
+              Peak{peakPoint ? ` @ ${peakPoint.time}` : ''}
+            </div>
           </div>
         </article>
 
         <article className="overview-kpi-tile">
           <div className="overview-kpi-icon" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
-            <BatteryCharging size={20} />
+            <Clock3 size={20} />
           </div>
           <div>
-            <div className="overview-kpi-value">{selfConsumptionRate}%</div>
-            <div className="overview-kpi-label">Self-Consumption</div>
+            <div className="overview-kpi-value">
+              {loading ? '—' : data.length.toLocaleString()}
+            </div>
+            <div className="overview-kpi-label">Data Points</div>
           </div>
         </article>
       </section>
+      )}
 
-      {/* Power curve - solar vs load */}
+      {/* Power Curve Chart */}
       <section className="detail-grid">
         <article className="chart-card" style={{ gridColumn: '1 / -1' }}>
-          <h3>Hourly Power — Solar vs Load</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={hourlyData}>
-              <defs>
-                <linearGradient id="todaySolarGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--chart-solar)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--chart-solar)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="todayLoadGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--chart-load)" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="var(--chart-load)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-              <XAxis dataKey="hour" stroke="var(--text-muted)" fontSize={10} tickLine={false} interval={2} />
-              <YAxis
-                stroke="var(--text-muted)"
-                fontSize={11}
-                tickLine={false}
-                label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fill: 'var(--text-muted)', fontSize: 11 } }}
-              />
-              <Tooltip content={<PowerTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="loadKw"
-                stroke="var(--chart-load)"
-                strokeWidth={2}
-                fill="url(#todayLoadGrad)"
-              />
-              <Area
-                type="monotone"
-                dataKey="solarKw"
-                stroke="var(--chart-solar)"
-                strokeWidth={2.5}
-                fill="url(#todaySolarGrad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-          <div className="chart-legend" style={{ marginTop: 12 }}>
-            <div className="legend-item">
-              <div className="legend-line" style={{ backgroundColor: 'var(--chart-solar)' }} />
-              <span>Solar (kW)</span>
+          <h3>Solar Power — Total Active Power (kW)</h3>
+          {loading && chartPoints.length === 0 ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 300,
+              color: 'var(--text-muted)',
+            }}>
+              Loading data from Higeco…
             </div>
-            <div className="legend-item">
-              <div className="legend-line" style={{ backgroundColor: 'var(--chart-load)' }} />
-              <span>Load (kW)</span>
+          ) : chartPoints.length === 0 ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 300,
+              color: 'var(--text-muted)',
+            }}>
+              No data available for today yet.
             </div>
-          </div>
-        </article>
-      </section>
-
-      {/* Net export bar chart */}
-      <section className="detail-grid" style={{ marginTop: 18 }}>
-        <article className="chart-card" style={{ gridColumn: '1 / -1' }}>
-          <h3>Net Grid Exchange (kW)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={hourlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-              <XAxis dataKey="hour" stroke="var(--text-muted)" fontSize={10} tickLine={false} interval={2} />
-              <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} />
-              <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1} />
-              <Tooltip content={<NetTooltip />} />
-              <Bar dataKey="netKw" radius={[3, 3, 3, 3]} name="Net">
-                {hourlyData.map((entry, i) => (
-                  <rect
-                    key={i}
-                    fill={entry.netKw >= 0 ? 'var(--success)' : 'var(--danger)'}
-                    fillOpacity={0.7}
+          ) : isAllSites ? (
+            <>
+              <ResponsiveContainer width="100%" height={340}>
+                <AreaChart data={allSitesData}>
+                  <defs>
+                    <linearGradient id="todayPdcGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-solar)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--chart-solar)" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="todayCenGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-load-solar)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--chart-load-solar)" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="var(--text-muted)"
+                    fontSize={10}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={40}
                   />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="chart-summary" style={{ marginTop: 12 }}>
-            <div className="chart-summary-item">
-              <div className="chart-summary-label">Total Generated</div>
-              <div className="chart-summary-value" style={{ color: 'var(--chart-solar)' }}>
-                {totalSolarToday.toFixed(1)} kWh
+                  <YAxis
+                    stroke="var(--text-muted)"
+                    fontSize={11}
+                    tickLine={false}
+                    label={{
+                      value: 'kW',
+                      angle: -90,
+                      position: 'insideLeft',
+                      style: { fill: 'var(--text-muted)', fontSize: 11 },
+                    }}
+                  />
+                  <Tooltip content={<PowerTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="parcDuCapKw"
+                    stroke="var(--chart-solar)"
+                    strokeWidth={2}
+                    fill="url(#todayPdcGrad)"
+                    dot={false}
+                    connectNulls
+                    name="Parc du Cap"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="centurionKw"
+                    stroke="var(--chart-load-solar)"
+                    strokeWidth={2}
+                    fill="url(#todayCenGrad)"
+                    dot={false}
+                    connectNulls
+                    name="Centurion"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="chart-legend" style={{ marginTop: 12 }}>
+                <div className="legend-item">
+                  <div className="legend-line" style={{ backgroundColor: 'var(--chart-solar)' }} />
+                  <span>Parc du Cap</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-line" style={{ backgroundColor: 'var(--chart-load-solar)' }} />
+                  <span>Centurion</span>
+                </div>
               </div>
-            </div>
-            <div className="chart-summary-item">
-              <div className="chart-summary-label">Total Consumed</div>
-              <div className="chart-summary-value" style={{ color: 'var(--chart-load)' }}>
-                {totalLoadToday.toFixed(1)} kWh
+            </>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={340}>
+                <AreaChart data={data}>
+                  <defs>
+                    <linearGradient id="todaySolarGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-solar)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--chart-solar)" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="var(--text-muted)"
+                    fontSize={10}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={40}
+                  />
+                  <YAxis
+                    stroke="var(--text-muted)"
+                    fontSize={11}
+                    tickLine={false}
+                    label={{
+                      value: 'kW',
+                      angle: -90,
+                      position: 'insideLeft',
+                      style: { fill: 'var(--text-muted)', fontSize: 11 },
+                    }}
+                  />
+                  <Tooltip content={<PowerTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="powerKw"
+                    stroke="var(--chart-solar)"
+                    strokeWidth={2}
+                    fill="url(#todaySolarGrad)"
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="chart-legend" style={{ marginTop: 12 }}>
+                <div className="legend-item">
+                  <div className="legend-line" style={{ backgroundColor: 'var(--chart-solar)' }} />
+                  <span>Total Active Power (kW)</span>
+                </div>
               </div>
-            </div>
-            <div className="chart-summary-item">
-              <div className="chart-summary-label">Net Balance</div>
-              <div
-                className="chart-summary-value"
-                style={{ color: totalSolarToday >= totalLoadToday ? 'var(--success)' : 'var(--danger)' }}
-              >
-                {(totalSolarToday - totalLoadToday).toFixed(1)} kWh
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </article>
       </section>
     </>

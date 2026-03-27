@@ -40,7 +40,7 @@ import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
 
-type NavTab = 'Dashboard' | 'Today' | 'By Day' | 'By Month' | 'All Time' | 'CSV Download';
+type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download';
 
 type CardId =
   | 'solar-metrics'
@@ -90,14 +90,6 @@ const Dashboard: React.FC = () => {
       items: [
         { label: 'Dashboard' as NavTab, icon: LayoutDashboard },
         { label: 'Today' as NavTab, icon: Star },
-      ],
-    },
-    {
-      label: 'History',
-      items: [
-        { label: 'By Day' as NavTab, icon: CalendarDays },
-        { label: 'By Month' as NavTab, icon: CalendarRange },
-        { label: 'All Time' as NavTab, icon: Clock3 },
       ],
     },
     {
@@ -235,7 +227,7 @@ const Dashboard: React.FC = () => {
         <div className="sidebar-footer">
           <div>Version 0.8.0</div>
           <div>{format(new Date(), 'HH:mm:ss')}</div>
-          <div>{user ? user.name : 'Executive User'}</div>
+          <div>{user ? user.username : 'Executive User'}</div>
         </div>
       </aside>
 
@@ -255,41 +247,6 @@ const Dashboard: React.FC = () => {
                 <ChevronDown size={14} />
               </div>
             </label>
-
-            {activeTab === 'Dashboard' && (
-              <div className="card-manager">
-                <button
-                  type="button"
-                  className="btn-card-manager"
-                  onClick={() => setIsCardManagerOpen((prev) => !prev)}
-                  aria-expanded={isCardManagerOpen}
-                >
-                  <SlidersHorizontal size={14} />
-                  <span>Cards ({visibleCardCount}/{CARD_CONFIG.length})</span>
-                </button>
-
-                {isCardManagerOpen && (
-                  <div className="card-manager-menu" role="menu" aria-label="Card visibility controls">
-                    <div className="card-manager-header">
-                      <p>Visible Cards</p>
-                      <button type="button" onClick={setAllCardsVisible}>Show all</button>
-                    </div>
-                    <div className="card-manager-list">
-                      {CARD_CONFIG.map((card) => (
-                        <label key={card.id} className="card-toggle-item">
-                          <input
-                            type="checkbox"
-                            checked={visibleCards[card.id]}
-                            onChange={(event) => setCardVisibility(card.id, event.target.checked)}
-                          />
-                          <span>{card.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             <label className="topbar-field">
               <Globe2 size={14} />
@@ -319,137 +276,18 @@ const Dashboard: React.FC = () => {
 
         <main className="dashboard-page">
           {activeTab === 'Today' && <TodayTab />}
-          {activeTab === 'By Day' && <ByDayTab />}
           {activeTab === 'By Month' && <ByMonthTab />}
           {activeTab === 'All Time' && <AllTimeTab />}
           {activeTab === 'CSV Download' && <CsvDownloadTab />}
 
           {activeTab === 'Dashboard' && (
             <>
-              <section className="page-heading">
-                <div>
-                  <p className="page-kicker">Overview</p>
-                  <h1>Yearly Data</h1>
-                  <p className="page-subtitle">Momentum Group renewable energy command center</p>
-                </div>
-                <label className="page-select">
-                  <span>Year</span>
-                  <div className="select-wrap">
-                    <select value={selectedYear} onChange={(event) => setSelectedYear(event.target.value)}>
-                      {availableYears.map((year) => (
-                        <option value={year} key={year}>{year}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} />
-                  </div>
-                </label>
-              </section>
+              <ByDayTab />
 
               <section className="metrics-layout-v2">
-                <div className="metrics-top-row">
-                  {renderManagedCard('solar-metrics', 'Solar Production', <SolarMetrics />)}
+                <div className="metrics-full-row">
                   {renderManagedCard('target-progress', 'Target Progress', <TargetProgress />)}
-                  {renderManagedCard('financial-metrics', 'Financial Performance', <FinancialMetrics />)}
                 </div>
-
-                <div className="metrics-bottom-row">
-                  {renderManagedCard(
-                    'autarky',
-                    'Autarky',
-                    <article className="mini-panel mini-panel--enhanced">
-                      <h3><ShieldCheck size={16} /> Autarky (Self-Sufficiency)</h3>
-                      <div className="autarky-layout">
-                        <div className="autarky-gauge-section">
-                          <div className="autarky-circle">
-                            <svg viewBox="0 0 100 100" className="autarky-ring">
-                              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--progress-track-bg)" strokeWidth="7" />
-                              <circle
-                                cx="50" cy="50" r="42" fill="none"
-                                stroke={autarky >= 80 ? 'var(--success)' : autarky >= 60 ? 'var(--warning)' : 'var(--danger)'}
-                                strokeWidth="7"
-                                strokeLinecap="round"
-                                strokeDasharray={`${(autarky / 100) * 263.9} 263.9`}
-                                transform="rotate(-90 50 50)"
-                              />
-                            </svg>
-                            <div className="autarky-pct">{autarky}<span>%</span></div>
-                          </div>
-                          <div className="autarky-gauge-label">Self-Sufficiency Score</div>
-                        </div>
-                        <div className="autarky-stats-grid">
-                          <div className="autarky-card autarky-card--solar">
-                            <Sun size={14} className="autarky-card-icon" />
-                            <div className="autarky-card-value">{dailyData[dailyData.length - 1]?.solarProduction ?? 0}<span> kWh</span></div>
-                            <div className="autarky-card-label">Today Solar</div>
-                          </div>
-                          <div className="autarky-card autarky-card--load">
-                            <Zap size={14} className="autarky-card-icon" />
-                            <div className="autarky-card-value">{dailyData[dailyData.length - 1]?.loadConsumption ?? 0}<span> kWh</span></div>
-                            <div className="autarky-card-label">Today Load</div>
-                          </div>
-                          <div className="autarky-card autarky-card--solar">
-                            <Sun size={14} className="autarky-card-icon" />
-                            <div className="autarky-card-value">{totalSolar.toLocaleString()}<span> kWh</span></div>
-                            <div className="autarky-card-label">Monthly Solar</div>
-                          </div>
-                          <div className="autarky-card autarky-card--load">
-                            <Zap size={14} className="autarky-card-icon" />
-                            <div className="autarky-card-value">{totalLoad.toLocaleString()}<span> kWh</span></div>
-                            <div className="autarky-card-label">Monthly Load</div>
-                          </div>
-                        </div>
-                      </div>
-                    </article>,
-                  )}
-
-                  {renderManagedCard(
-                    'earnings',
-                    'Earnings',
-                    <article className="mini-panel mini-panel--enhanced">
-                      <h3><Banknote size={16} /> Earnings Breakdown</h3>
-                      <div className="earnings-content">
-                        <div className="earnings-total">
-                          <div className="earnings-total-value">R{financialMetrics.monthlyEarnings.toLocaleString()}</div>
-                          <div className="earnings-total-label">Total Monthly Earnings</div>
-                        </div>
-                        <div className="earnings-breakdown">
-                          <div className="earnings-item">
-                            <div className="earnings-item-bar" style={{ background: 'var(--info)' }} />
-                            <div className="earnings-item-detail">
-                              <span className="earnings-item-label">Feed-in Revenue</span>
-                              <strong>R{feedInRevenue.toLocaleString()}</strong>
-                            </div>
-                          </div>
-                          <div className="earnings-item">
-                            <div className="earnings-item-bar" style={{ background: 'var(--success)' }} />
-                            <div className="earnings-item-detail">
-                              <span className="earnings-item-label">Self-Consumption Savings</span>
-                              <strong>R{selfConsumptionSavings.toLocaleString()}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </article>,
-                  )}
-                </div>
-              </section>
-
-              <section className="detail-grid">
-                {renderManagedCard('production', 'Production Details', <ProductionChart />)}
-                {renderManagedCard('consumption', 'Consumption Details', <LoadVsSolarChart />)}
-              </section>
-
-              <section className="secondary-heading">
-                <div>
-                  <p className="page-kicker">Additional Analysis</p>
-                  <h2>Operational Detail</h2>
-                </div>
-                <div className="secondary-note">Average yearly yield: {annualYield} kWh per month</div>
-              </section>
-
-              <section className="secondary-grid">
-                {renderManagedCard('load-coverage', 'Load Coverage', <LoadCoverage />)}
-                {renderManagedCard('irradiance', 'Irradiance vs Production', <IrradianceVsProduction />)}
               </section>
 
               {visibleCardCount === 0 && (

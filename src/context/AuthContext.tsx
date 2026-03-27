@@ -1,35 +1,32 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+const HIGECO_GRAPHQL = '/api/graphql';
+const LOGIN_MUTATION = 'mutation ($v: Credentials) { req_0: login(credentials: $v) }';
+
 interface User {
-  email: string;
-  name: string;
+  username: string;
+  token: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  signIn: (email: string, password: string) => Promise<boolean>;
+  signIn: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticated: false,
-  signIn: async () => false,
+  signIn: async () => ({ success: false }),
   signOut: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-// Demo credentials for the executive dashboard
-const DEMO_USERS: Record<string, { password: string; name: string }> = {
-  'admin@solarpv.com': { password: 'admin123', name: 'Admin User' },
-  'exec@solarpv.com': { password: 'exec123', name: 'Executive User' },
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('solar-dashboard-user');
+    const stored = sessionStorage.getItem('solar-dashboard-user');
     if (stored) {
       try { return JSON.parse(stored); } catch { return null; }
     }
@@ -38,19 +35,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (user) {
-      localStorage.setItem('solar-dashboard-user', JSON.stringify(user));
+      sessionStorage.setItem('solar-dashboard-user', JSON.stringify(user));
     } else {
-      localStorage.removeItem('solar-dashboard-user');
+      sessionStorage.removeItem('solar-dashboard-user');
     }
   }, [user]);
 
-  const signIn = async (email: string, password: string): Promise<boolean> => {
-    const entry = DEMO_USERS[email.toLowerCase()];
-    if (entry && entry.password === password) {
-      setUser({ email: email.toLowerCase(), name: entry.name });
-      return true;
+  const signIn = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(HIGECO_GRAPHQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: LOGIN_MUTATION,
+          variables: { v: { u: username, p: password } },
+        }),
+      });
+
+      if (!res.ok) {
+        return { success: false, error: 'Server error. Please try again.' };
+      }
+
+      const json = await res.json();
+
+      if (json.errors?.length) {
+        const msg = json.errors[0]?.message;
+        if (msg === 'InvalidCredentials') {
+          return { success: false, error: 'Invalid username or password.' };
+        }
+        return { success: false, error: msg || 'Login failed.' };
+      }
+
+      const token = json.data?.req_0;
+      if (token) {
+        setUser({ username, token });
+        return { success: true };
+      }
+
+      return { success: false, error: 'Unexpected response from server.' };
+    } catch {
+      return { success: false, error: 'Unable to reach the server. Check your connection.' };
     }
-    return false;
   };
 
   const signOut = () => setUser(null);

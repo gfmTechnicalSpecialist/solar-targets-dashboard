@@ -1,100 +1,265 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSite } from '../context/SiteContext';
-import { Target, CheckCircle, AlertCircle, TrendingUp, CalendarCheck } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Target, Settings, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
 
 const TargetProgress: React.FC = () => {
-  const { siteData } = useSite();
-  const { currentMetrics, monthlyDataByYear } = siteData;
-  const monthlyProgress = (currentMetrics.monthlyProduction / currentMetrics.monthlyTarget) * 100;
+  const { siteId } = useSite();
+  const { user } = useAuth();
+  const activeSite: 'parc-du-cap' | 'centurion' =
+    siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
 
-  // Get current and last month data
   const now = new Date();
-  const currentYear = String(now.getFullYear());
   const currentMonthIdx = now.getMonth();
-  const yearData = monthlyDataByYear[currentYear] ?? [];
+  const dayOfMonth = now.getDate();
 
-  // Last month (handle Jan → previous Dec)
-  let lastMonthData: { production: number; target: number; month: string } | null = null;
-  if (currentMonthIdx === 0) {
-    const prevYearData = monthlyDataByYear[String(now.getFullYear() - 1)];
-    if (prevYearData?.length) lastMonthData = prevYearData[11];
-  } else if (yearData.length > currentMonthIdx - 1) {
-    lastMonthData = yearData[currentMonthIdx - 1];
-  }
-  const lastMonthProgress = lastMonthData ? (lastMonthData.production / lastMonthData.target) * 100 : null;
+  // Fetch enough days to cover current month + last month
+  const daysInLastMonth = currentMonthIdx === 0
+    ? new Date(now.getFullYear() - 1, 12, 0).getDate()
+    : new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  const daysToFetch = dayOfMonth + daysInLastMonth;
 
-  const getBarColor = (progress: number) => {
-    if (progress >= 85) return 'var(--success)';
-    if (progress >= 70) return 'var(--warning)';
-    return 'var(--danger)';
+  const [data, setData] = useState<DailyProductionPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    if (!user?.token) return;
+    setLoading(true);
+    try {
+      let result: DailyProductionPoint[];
+      if (siteId === 'all') {
+        const [pdc, cen] = await Promise.all([
+          fetchDailyProduction(user.token, daysToFetch, 'parc-du-cap'),
+          fetchDailyProduction(user.token, daysToFetch, 'centurion'),
+        ]);
+        result = pdc.map((p, i) => ({
+          date: p.date,
+          dateLabel: p.dateLabel,
+          productionKwh: Math.round((p.productionKwh + (cen[i]?.productionKwh ?? 0)) * 10) / 10,
+          loadKwh: Math.round((p.loadKwh + (cen[i]?.loadKwh ?? 0)) * 10) / 10,
+          loadDuringSolarKwh: Math.round((p.loadDuringSolarKwh + (cen[i]?.loadDuringSolarKwh ?? 0)) * 10) / 10,
+        }));
+      } else {
+        result = await fetchDailyProduction(user.token, daysToFetch, activeSite);
+      }
+      setData(result);
+    } catch {
+      // silently fail — cards will show 0 production
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.token, daysToFetch, siteId, activeSite]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Split data into current month and last month
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthStr = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const currentMonthData = data.filter(d => d.date.startsWith(currentMonthStr));
+  const lastMonthDataArr = data.filter(d => d.date.startsWith(lastMonthStr));
+
+  const currentMonthProduction = Math.round(currentMonthData.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
+  const lastMonthProduction = Math.round(lastMonthDataArr.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
+
+  // Keys for per-month target storage
+  const currentMonthKey = `monthlyTarget_${siteId}_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastMonthKey = `monthlyTarget_${siteId}_${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  // Also support legacy key (migrates old single-value target)
+  const legacyKey = `monthlyTarget_${siteId}`;
+
+  const [customTarget, setCustomTarget] = useState<number | null>(() => {
+    const stored = localStorage.getItem(currentMonthKey);
+    if (stored) return Number(stored);
+    // Migrate from legacy key if exists
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy) {
+      localStorage.setItem(currentMonthKey, legacy);
+      return Number(legacy);
+    }
+    return null;
+  });
+
+  const [lastMonthTarget, setLastMonthTarget] = useState<number | null>(() => {
+    const stored = localStorage.getItem(lastMonthKey);
+    return stored ? Number(stored) : null;
+  });
+
+  const [targetInput, setTargetInput] = useState('');
+  const [showTargetInput, setShowTargetInput] = useState(false);
+
+  useEffect(() => {
+    // Load current month target
+    const stored = localStorage.getItem(currentMonthKey);
+    if (stored) {
+      setCustomTarget(Number(stored));
+      setTargetInput(stored);
+    } else {
+      const legacy = localStorage.getItem(legacyKey);
+      if (legacy) {
+        localStorage.setItem(currentMonthKey, legacy);
+        setCustomTarget(Number(legacy));
+        setTargetInput(legacy);
+      } else {
+        setCustomTarget(null);
+        setTargetInput('');
+      }
+    }
+    // Load last month target
+    const lastStored = localStorage.getItem(lastMonthKey);
+    setLastMonthTarget(lastStored ? Number(lastStored) : null);
+  }, [currentMonthKey, lastMonthKey, legacyKey]);
+
+  const saveTarget = () => {
+    const val = Math.max(0, Number(targetInput) || 0);
+    if (val > 0) {
+      setCustomTarget(val);
+      localStorage.setItem(currentMonthKey, String(val));
+      localStorage.setItem(legacyKey, String(val));
+      // Auto-set last month's target if it doesn't already have one
+      if (!localStorage.getItem(lastMonthKey)) {
+        localStorage.setItem(lastMonthKey, String(val));
+        setLastMonthTarget(val);
+      }
+    } else {
+      setCustomTarget(null);
+      localStorage.removeItem(currentMonthKey);
+      localStorage.removeItem(legacyKey);
+    }
+    setShowTargetInput(false);
   };
 
-  const getStatusLabel = (progress: number) => {
-    if (progress >= 95) return { text: 'Ahead of Target', cls: 'status-ahead', icon: <CheckCircle size={14} /> };
-    if (progress >= 85) return { text: 'On Track', cls: 'status-on-track', icon: <TrendingUp size={14} /> };
-    return { text: 'Behind Target', cls: 'status-behind', icon: <AlertCircle size={14} /> };
-  };
+  const monthlyTarget = customTarget ?? 0;
+  const monthlyProgress = monthlyTarget > 0 ? (currentMonthProduction / monthlyTarget) * 100 : 0;
+  const progressClamped = Math.min(monthlyProgress, 100);
 
-  const status = getStatusLabel(monthlyProgress);
+  // Last month progress
+  const effectiveLastMonthTarget = lastMonthTarget ?? monthlyTarget;
+  const lastMonthProgress = effectiveLastMonthTarget > 0 && lastMonthDataArr.length > 0
+    ? (lastMonthProduction / effectiveLastMonthTarget) * 100 : null;
+  const lastMonthClamped = lastMonthProgress !== null ? Math.min(lastMonthProgress, 100) : 0;
+
+  const currentMonthName = now.toLocaleString('default', { month: 'long' });
+  const lastMonthName = lastMonthDate.toLocaleString('default', { month: 'long' });
 
   return (
-    <div className="metric-card metric-card--enhanced">
-      <h3><Target size={18} /> Target Progress</h3>
-
-      <div className="metric-target-block">
-        <div className="metric-target-header">
-          <span className="metric-target-label">Current Month</span>
-          <span className="metric-target-pct" style={{ color: getBarColor(monthlyProgress) }}>
-            {Math.round(monthlyProgress)}%
-          </span>
-        </div>
-        <div className="progress-track" style={{ height: 8 }}>
-          <div
-            className="progress-fill"
-            style={{
-              width: `${Math.min(monthlyProgress, 100)}%`,
-              background: `linear-gradient(90deg, ${getBarColor(monthlyProgress)}, ${getBarColor(monthlyProgress)})`,
-            }}
-          />
-        </div>
-        <div className="metric-target-detail">
-          <span>{currentMetrics.monthlyProduction.toLocaleString()} kWh</span>
-          <span className="metric-target-of">of {currentMetrics.monthlyTarget.toLocaleString()} kWh</span>
+    <div className="tp-wrapper">
+      {/* Header row */}
+      <div className="tp-header-row">
+        <h3 className="tp-main-title"><Target size={18} /> Target Progress</h3>
+        <div style={{ position: 'relative' }}>
+          <button
+            className="target-set-btn"
+            onClick={() => { setShowTargetInput(!showTargetInput); setTargetInput(customTarget ? String(customTarget) : ''); }}
+            data-active={!!customTarget}
+          >
+            <Settings size={12} />
+            {customTarget ? `${customTarget.toLocaleString()} kWh` : 'Set Target'}
+          </button>
+          {showTargetInput && (
+            <div className="target-input-dropdown">
+              <label>Monthly Production Target (kWh)</label>
+              <input
+                type="number"
+                min="0"
+                value={targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveTarget()}
+                placeholder="e.g. 50000"
+              />
+              <div className="target-input-actions">
+                <button className="target-save-btn" onClick={saveTarget}>Save</button>
+                {customTarget && (
+                  <button
+                    className="target-clear-btn"
+                    onClick={() => { setCustomTarget(null); setTargetInput(''); localStorage.removeItem(currentMonthKey); localStorage.removeItem(legacyKey); setShowTargetInput(false); }}
+                  >Clear</button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {lastMonthData && lastMonthProgress !== null && (
-        <div className="metric-target-block">
-          <div className="metric-target-header">
-            <span className="metric-target-label">
-              <CalendarCheck size={13} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />
-              Last Month ({lastMonthData.month})
-            </span>
-            <span className="metric-target-pct" style={{ color: getBarColor(lastMonthProgress) }}>
-              {Math.round(lastMonthProgress)}%
-            </span>
+      {/* 4 cards grid */}
+      <div className="tp-grid" style={{ position: 'relative' }}>
+        {loading && (
+          <div className="chart-loading-overlay">
+            <div className="chart-loading-inner">
+              <Loader2 size={28} className="spinner" />
+            </div>
           </div>
-          <div className="progress-track" style={{ height: 8 }}>
+        )}
+        {/* Card 1: Current Month Progress */}
+        <div className="tp-card">
+          <div className="tp-card-header">
+            <div className="tp-card-title">
+              <Target size={14} />
+              <span>{currentMonthName} Progress</span>
+            </div>
+            <span className="tp-bar-badge tp-bar-badge--current">Current</span>
+          </div>
+          <div className="tp-card-value tp-card-value--green">
+            {Math.round(monthlyProgress)}%
+          </div>
+          <div className="tp-track">
             <div
-              className="progress-fill"
-              style={{
-                width: `${Math.min(lastMonthProgress, 100)}%`,
-                background: `linear-gradient(90deg, ${getBarColor(lastMonthProgress)}, ${getBarColor(lastMonthProgress)})`,
-              }}
+              className="tp-fill tp-fill--green"
+              style={{ width: `${progressClamped}%` }}
             />
           </div>
-          <div className="metric-target-detail">
-            <span>{lastMonthData.production.toLocaleString()} kWh</span>
-            <span className="metric-target-of">of {lastMonthData.target.toLocaleString()} kWh</span>
+          <div className="tp-card-detail">
+            <span>{currentMonthProduction.toLocaleString()} kWh</span>
+            <span className="tp-bar-separator">/</span>
+            <span className="tp-bar-target">{monthlyTarget.toLocaleString()} kWh</span>
+            {monthlyProgress >= 85 ? (
+              <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
+            ) : (
+              <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
+            )}
           </div>
         </div>
-      )}
 
-      <div className="metric-status-badge">
-        <div className={`status-indicator ${status.cls}`}>
-          {status.icon}
-          {status.text}
+        {/* Card 2: Last Month Progress */}
+        <div className="tp-card">
+          <div className="tp-card-header">
+            <div className="tp-card-title">
+              <Target size={14} />
+              <span>{lastMonthName} Progress</span>
+            </div>
+            <span className="tp-bar-badge tp-bar-badge--last">Last Month</span>
+          </div>
+          {lastMonthDataArr.length > 0 && lastMonthProgress !== null ? (
+            <>
+              <div className="tp-card-value tp-card-value--green">
+                {Math.round(lastMonthProgress)}%
+              </div>
+              <div className="tp-track">
+                <div
+                  className="tp-fill tp-fill--green"
+                  style={{ width: `${lastMonthClamped}%` }}
+                />
+              </div>
+              <div className="tp-card-detail">
+                <span>{lastMonthProduction.toLocaleString()} kWh</span>
+                <span className="tp-bar-separator">/</span>
+                <span className="tp-bar-target">{effectiveLastMonthTarget.toLocaleString()} kWh</span>
+                {lastMonthProgress >= 85 ? (
+                  <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
+                ) : (
+                  <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="tp-card-empty">No data available</div>
+          )}
         </div>
+
       </div>
     </div>
   );
