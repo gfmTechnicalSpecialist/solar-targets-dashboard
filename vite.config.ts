@@ -1,9 +1,31 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import obfuscatorPlugin from 'vite-plugin-obfuscator'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    obfuscatorPlugin({
+      include: ['src/api/**', 'src/context/AuthContext.tsx'],
+      apply: 'build',
+      options: {
+        compact: true,
+        controlFlowFlattening: true,
+        controlFlowFlatteningThreshold: 0.75,
+        deadCodeInjection: true,
+        deadCodeInjectionThreshold: 0.4,
+        stringArray: true,
+        stringArrayEncoding: ['rc4'],
+        stringArrayThreshold: 0.75,
+        renameGlobals: false,
+        selfDefending: false,
+        splitStrings: true,
+        splitStringsChunkLength: 5,
+        identifierNamesGenerator: 'hexadecimal',
+      },
+    }),
+  ],
   server: {
     proxy: {
       '/api/graphql': {
