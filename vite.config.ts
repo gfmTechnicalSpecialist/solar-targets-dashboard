@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+// @ts-ignore -- no type declarations available
 import obfuscatorPlugin from 'vite-plugin-obfuscator'
 
 // https://vite.dev/config/
