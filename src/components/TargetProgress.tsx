@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
-import { Target, Settings, Loader2 } from 'lucide-react';
+import { Target, Loader2 } from 'lucide-react';
 import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
+import targetsConfig from '../data/targets.json';
 
 const TargetProgress: React.FC = () => {
   const { siteId } = useSite();
@@ -66,91 +67,10 @@ const TargetProgress: React.FC = () => {
   const currentMonthProduction = Math.round(currentMonthData.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
   const lastMonthProduction = Math.round(lastMonthDataArr.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
 
-  // --- Target persistence: API-backed with localStorage fallback ---
-  const currentMonthKey = `monthlyTarget_${siteId}_${currentMonthStr}`;
-  const lastMonthKey = `monthlyTarget_${siteId}_${lastMonthStr}`;
-  const legacyKey = `monthlyTarget_${siteId}`;
-
-  const fetchTarget = async (site: string, month: string, localKey: string): Promise<number | null> => {
-    try {
-      const res = await fetch(`/api/targets/${encodeURIComponent(site)}/${month}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.target != null) {
-          localStorage.setItem(localKey, String(json.target));
-          return json.target;
-        }
-      }
-    } catch { /* API unavailable — fall through to localStorage */ }
-    const stored = localStorage.getItem(localKey);
-    if (stored) return Number(stored);
-    if (localKey === currentMonthKey) {
-      const legacy = localStorage.getItem(legacyKey);
-      if (legacy) return Number(legacy);
-    }
-    return null;
-  };
-
-  const putTarget = async (site: string, month: string, localKey: string, value: number | null) => {
-    localStorage.setItem(localKey, value != null ? String(value) : '');
-    if (value == null) localStorage.removeItem(localKey);
-    try {
-      await fetch(`/api/targets/${encodeURIComponent(site)}/${month}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: value }),
-      });
-    } catch { /* API unavailable — localStorage already updated */ }
-  };
-
-  const [customTarget, setCustomTarget] = useState<number | null>(() => {
-    const stored = localStorage.getItem(currentMonthKey);
-    if (stored) return Number(stored);
-    const legacy = localStorage.getItem(legacyKey);
-    if (legacy) return Number(legacy);
-    return null;
-  });
-
-  const [lastMonthTarget, setLastMonthTarget] = useState<number | null>(() => {
-    const stored = localStorage.getItem(lastMonthKey);
-    return stored ? Number(stored) : null;
-  });
-
-  const [targetInput, setTargetInput] = useState('');
-  const [showTargetInput, setShowTargetInput] = useState(false);
-
-  useEffect(() => {
-    // Hydrate from API on mount, overriding localStorage if server has data
-    fetchTarget(siteId, currentMonthStr, currentMonthKey).then((val) => {
-      setCustomTarget(val);
-      if (val != null) setTargetInput(String(val));
-      else setTargetInput('');
-    });
-    fetchTarget(siteId, lastMonthStr, lastMonthKey).then((val) => {
-      setLastMonthTarget(val);
-    });
-  }, [siteId, currentMonthStr, lastMonthStr]);
-
-  const saveTarget = () => {
-    const val = Math.max(0, Number(targetInput) || 0);
-    if (val > 0) {
-      setCustomTarget(val);
-      putTarget(siteId, currentMonthStr, currentMonthKey, val);
-      localStorage.setItem(legacyKey, String(val));
-      // Auto-set last month's target if it doesn't already have one
-      if (!localStorage.getItem(lastMonthKey)) {
-        setLastMonthTarget(val);
-        putTarget(siteId, lastMonthStr, lastMonthKey, val);
-      }
-    } else {
-      setCustomTarget(null);
-      putTarget(siteId, currentMonthStr, currentMonthKey, null);
-      localStorage.removeItem(legacyKey);
-    }
-    setShowTargetInput(false);
-  };
-
-  const monthlyTarget = customTarget ?? 0;
+  // --- Targets from config file (src/data/targets.json) ---
+  const siteTargets = (targetsConfig as Record<string, Record<string, number>>)[siteId] ?? {};
+  const monthlyTarget = siteTargets[currentMonthStr] ?? 0;
+  const lastMonthTargetVal = siteTargets[lastMonthStr] ?? 0;
   const monthlyProgress = monthlyTarget > 0 ? (currentMonthProduction / monthlyTarget) * 100 : 0;
   const progressClamped = Math.min(monthlyProgress, 100);
 
@@ -158,7 +78,7 @@ const TargetProgress: React.FC = () => {
   const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
   // Last month progress
-  const effectiveLastMonthTarget = lastMonthTarget ?? monthlyTarget;
+  const effectiveLastMonthTarget = lastMonthTargetVal;
   const lastMonthDaysTotal = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0).getDate();
   const lastMonthDaysWithData = lastMonthDataArr.filter(d => d.productionKwh > 0).length;
   const lastMonthProgress = effectiveLastMonthTarget > 0 && lastMonthDataArr.length > 0
@@ -173,38 +93,11 @@ const TargetProgress: React.FC = () => {
       {/* Header row */}
       <div className="tp-header-row">
         <h3 className="tp-main-title"><Target size={18} /> Target Progress</h3>
-        <div style={{ position: 'relative' }}>
-          <button
-            className="target-set-btn"
-            onClick={() => { setShowTargetInput(!showTargetInput); setTargetInput(customTarget ? String(customTarget) : ''); }}
-            data-active={!!customTarget}
-          >
-            <Settings size={12} />
-            {customTarget ? `${customTarget.toLocaleString()} kWh` : 'Set Target'}
-          </button>
-          {showTargetInput && (
-            <div className="target-input-dropdown">
-              <label>Monthly Production Target (kWh)</label>
-              <input
-                type="number"
-                min="0"
-                value={targetInput}
-                onChange={(e) => setTargetInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveTarget()}
-                placeholder="e.g. 50000"
-              />
-              <div className="target-input-actions">
-                <button className="target-save-btn" onClick={saveTarget}>Save</button>
-                {customTarget && (
-                  <button
-                    className="target-clear-btn"
-                    onClick={() => { setCustomTarget(null); setTargetInput(''); putTarget(siteId, currentMonthStr, currentMonthKey, null); localStorage.removeItem(legacyKey); setShowTargetInput(false); }}
-                  >Clear</button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        {monthlyTarget > 0 && (
+          <span className="target-set-btn" data-active="true">
+            {monthlyTarget.toLocaleString()} kWh
+          </span>
+        )}
       </div>
 
       {/* 4 cards grid */}
