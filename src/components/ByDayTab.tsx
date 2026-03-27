@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
+import targetsConfig from '../data/targets.json';
 
 function isWeekend(dateStr: string): boolean {
   const d = new Date(dateStr + 'T12:00:00');
@@ -31,36 +32,9 @@ const ByDayTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Daily production target — persisted per site in localStorage
-  const targetKey = `dailyTarget_${siteId}`;
-  const [dailyTarget, setDailyTarget] = useState<number>(() => {
-    const stored = localStorage.getItem(targetKey);
-    return stored ? Number(stored) : 0;
-  });
-  const [targetInput, setTargetInput] = useState(() => {
-    const stored = localStorage.getItem(targetKey);
-    return stored && Number(stored) > 0 ? stored : '';
-  });
-  const [showTargetInput, setShowTargetInput] = useState(false);
-
-  // Sync when site changes
-  useEffect(() => {
-    const stored = localStorage.getItem(targetKey);
-    const val = stored ? Number(stored) : 0;
-    setDailyTarget(val);
-    setTargetInput(val > 0 ? String(val) : '');
-  }, [targetKey]);
-
-  const saveTarget = () => {
-    const val = Math.max(0, Number(targetInput) || 0);
-    setDailyTarget(val);
-    if (val > 0) {
-      localStorage.setItem(targetKey, String(val));
-    } else {
-      localStorage.removeItem(targetKey);
-    }
-    setShowTargetInput(false);
-  };
+  // Daily production target from config file
+  const siteTargets = (targetsConfig as Record<string, Record<string, number>>)[siteId] ?? {};
+  const dailyTarget = siteTargets['dailyTarget'] ?? 0;
 
   const siteLabel = siteId === 'all' ? 'All Sites' : globalSiteLabel;
   const daysCount = Number(range);
@@ -241,93 +215,24 @@ const ByDayTab: React.FC = () => {
         <article className="chart-card" style={{ gridColumn: '1 / -1' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Daily Solar Production vs Load</h3>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowTargetInput(!showTargetInput)}
+            {dailyTarget > 0 && (
+              <span
                 style={{
-                  background: dailyTarget > 0 ? 'var(--chart-solar)' : 'var(--surface-hover)',
-                  border: 'none',
+                  background: 'var(--chart-solar)',
                   borderRadius: 8,
                   padding: '6px 12px',
-                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  color: dailyTarget > 0 ? '#fff' : 'var(--text-secondary)',
+                  color: '#fff',
                   fontSize: '0.8rem',
+                  fontWeight: 600,
                 }}
               >
                 <Target size={14} />
-                {dailyTarget > 0 ? `Target: ${dailyTarget.toLocaleString()} kWh` : 'Set Target'}
-              </button>
-              {showTargetInput && (
-                <div style={{
-                  position: 'absolute',
-                  top: '110%',
-                  right: 0,
-                  background: '#fff',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: 12,
-                  zIndex: 50,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  minWidth: 200,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                }}>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Daily Production Target (kWh)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={targetInput}
-                    onChange={(e) => setTargetInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && saveTarget()}
-                    placeholder="e.g. 15000"
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      fontSize: '0.85rem',
-                      background: 'var(--surface-hover)',
-                      color: 'var(--text-primary)',
-                      outline: 'none',
-                    }}
-                  />
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={saveTarget}
-                      style={{
-                        flex: 1,
-                        padding: '6px 0',
-                        borderRadius: 6,
-                        border: 'none',
-                        background: 'var(--chart-solar)',
-                        color: '#fff',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                    >Save</button>
-                    {dailyTarget > 0 && (
-                      <button
-                        onClick={() => { setTargetInput(''); setDailyTarget(0); localStorage.removeItem(targetKey); setShowTargetInput(false); }}
-                        style={{
-                          flex: 1,
-                          padding: '6px 0',
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                          background: 'transparent',
-                          color: 'var(--danger)',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                        }}
-                      >Clear</button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+                Target: {dailyTarget.toLocaleString()} kWh
+              </span>
+            )}
           </div>
           {loading && data.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, color: 'var(--text-muted)', gap: 12 }}>
