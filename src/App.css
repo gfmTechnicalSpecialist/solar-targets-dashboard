@@ -1084,7 +1084,7 @@
 
 .tp-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
 
@@ -1260,7 +1260,6 @@
   height: 8px;
   background: var(--progress-track-bg);
   border-radius: 999px;
-  overflow: hidden;
 }
 
 .tp-fill {
@@ -1269,6 +1268,7 @@
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   min-width: 4px;
+  overflow: hidden;
 }
 
 .tp-fill::after {
@@ -1282,6 +1282,63 @@
 
 .tp-fill--green {
   background: linear-gradient(90deg, #1e9b59, #27c46e) !important;
+}
+
+.tp-fill--amber {
+  background: linear-gradient(90deg, #d97706, #f59e0b) !important;
+}
+
+.tp-card-value--amber {
+  color: #d97706;
+}
+
+.tp-pace-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text-primary);
+  border-radius: 1px;
+  opacity: 0.5;
+  transform: translateX(-1px);
+  z-index: 1;
+}
+
+.tp-card-sub-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tp-sub-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tp-sub-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.tp-sub-value {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tp-sub-value--on-track {
+  color: #1e9b59;
+}
+
+.tp-sub-value--behind {
+  color: #d97706;
 }
 
 .tp-bar-badge {

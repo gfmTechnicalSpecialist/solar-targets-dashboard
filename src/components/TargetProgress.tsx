@@ -137,8 +137,21 @@ const TargetProgress: React.FC = () => {
   const monthlyProgress = monthlyTarget > 0 ? (currentMonthProduction / monthlyTarget) * 100 : 0;
   const progressClamped = Math.min(monthlyProgress, 100);
 
+  // Current month pace tracking
+  const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysWithData = currentMonthData.filter(d => d.productionKwh > 0).length;
+  const dailyAverage = daysWithData > 0 ? currentMonthProduction / daysWithData : 0;
+  const projectedTotal = Math.round(dailyAverage * daysInCurrentMonth);
+  const projectedProgress = monthlyTarget > 0 ? Math.min((projectedTotal / monthlyTarget) * 100, 999) : 0;
+  // Pro-rated target: where production should be by this day
+  const proRatedTarget = monthlyTarget > 0 ? (monthlyTarget / daysInCurrentMonth) * dayOfMonth : 0;
+  const onPace = currentMonthProduction >= proRatedTarget;
+
   // Last month progress
   const effectiveLastMonthTarget = lastMonthTarget ?? monthlyTarget;
+  const lastMonthDaysTotal = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0).getDate();
+  const lastMonthDaysWithData = lastMonthDataArr.filter(d => d.productionKwh > 0).length;
+  const lastMonthDailyAvg = lastMonthDaysWithData > 0 ? lastMonthProduction / lastMonthDaysWithData : 0;
   const lastMonthProgress = effectiveLastMonthTarget > 0 && lastMonthDataArr.length > 0
     ? (lastMonthProduction / effectiveLastMonthTarget) * 100 : null;
   const lastMonthClamped = lastMonthProgress !== null ? Math.min(lastMonthProgress, 100) : 0;
@@ -201,7 +214,7 @@ const TargetProgress: React.FC = () => {
               <Target size={14} />
               <span>{currentMonthName} Progress</span>
             </div>
-            <span className="tp-bar-badge tp-bar-badge--current">Current</span>
+            <span className="tp-bar-badge tp-bar-badge--current">Day {dayOfMonth} of {daysInCurrentMonth}</span>
           </div>
           <div className="tp-card-value tp-card-value--green">
             {Math.round(monthlyProgress)}%
@@ -211,15 +224,42 @@ const TargetProgress: React.FC = () => {
               className="tp-fill tp-fill--green"
               style={{ width: `${progressClamped}%` }}
             />
+            {monthlyTarget > 0 && (
+              <div
+                className="tp-pace-marker"
+                style={{ left: `${Math.min((proRatedTarget / monthlyTarget) * 100, 100)}%` }}
+                title={`Expected by day ${dayOfMonth}: ${Math.round(proRatedTarget).toLocaleString()} kWh`}
+              />
+            )}
           </div>
           <div className="tp-card-detail">
             <span>{currentMonthProduction.toLocaleString()} kWh</span>
             <span className="tp-bar-separator">/</span>
             <span className="tp-bar-target">{monthlyTarget.toLocaleString()} kWh</span>
-            {monthlyProgress >= 85 ? (
+            {onPace ? (
               <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
             ) : (
               <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
+            )}
+          </div>
+          <div className="tp-card-sub-stats">
+            <div className="tp-sub-stat">
+              <span className="tp-sub-label">Daily Avg</span>
+              <span className="tp-sub-value">{Math.round(dailyAverage).toLocaleString()} kWh</span>
+            </div>
+            <div className="tp-sub-stat">
+              <span className="tp-sub-label">Projected</span>
+              <span className={`tp-sub-value ${projectedProgress >= 100 ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
+                {projectedTotal.toLocaleString()} kWh
+              </span>
+            </div>
+            {monthlyTarget > 0 && (
+              <div className="tp-sub-stat">
+                <span className="tp-sub-label">Pace</span>
+                <span className={`tp-sub-value ${onPace ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
+                  {onPace ? 'On Track' : 'Behind'}
+                </span>
+              </div>
             )}
           </div>
         </div>
@@ -231,16 +271,16 @@ const TargetProgress: React.FC = () => {
               <Target size={14} />
               <span>{lastMonthName} Progress</span>
             </div>
-            <span className="tp-bar-badge tp-bar-badge--last">Last Month</span>
+            <span className="tp-bar-badge tp-bar-badge--last">{lastMonthDaysWithData} of {lastMonthDaysTotal} days</span>
           </div>
           {lastMonthDataArr.length > 0 && lastMonthProgress !== null ? (
             <>
-              <div className="tp-card-value tp-card-value--green">
+              <div className={`tp-card-value ${lastMonthProgress >= 100 ? 'tp-card-value--green' : 'tp-card-value--amber'}`}>
                 {Math.round(lastMonthProgress)}%
               </div>
               <div className="tp-track">
                 <div
-                  className="tp-fill tp-fill--green"
+                  className={`tp-fill ${lastMonthProgress >= 100 ? 'tp-fill--green' : 'tp-fill--amber'}`}
                   style={{ width: `${lastMonthClamped}%` }}
                 />
               </div>
@@ -248,11 +288,23 @@ const TargetProgress: React.FC = () => {
                 <span>{lastMonthProduction.toLocaleString()} kWh</span>
                 <span className="tp-bar-separator">/</span>
                 <span className="tp-bar-target">{effectiveLastMonthTarget.toLocaleString()} kWh</span>
-                {lastMonthProgress >= 85 ? (
+                {lastMonthProgress >= 100 ? (
                   <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
                 ) : (
                   <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
                 )}
+              </div>
+              <div className="tp-card-sub-stats">
+                <div className="tp-sub-stat">
+                  <span className="tp-sub-label">Daily Avg</span>
+                  <span className="tp-sub-value">{Math.round(lastMonthDailyAvg).toLocaleString()} kWh</span>
+                </div>
+                <div className="tp-sub-stat">
+                  <span className="tp-sub-label">Result</span>
+                  <span className={`tp-sub-value ${lastMonthProgress >= 100 ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
+                    {lastMonthProgress >= 100 ? 'Target Met' : `Missed by ${Math.round(effectiveLastMonthTarget - lastMonthProduction).toLocaleString()} kWh`}
+                  </span>
+                </div>
               </div>
             </>
           ) : (
