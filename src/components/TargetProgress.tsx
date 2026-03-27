@@ -242,26 +242,6 @@ const TargetProgress: React.FC = () => {
               <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
             )}
           </div>
-          <div className="tp-card-sub-stats">
-            <div className="tp-sub-stat">
-              <span className="tp-sub-label">Daily Avg</span>
-              <span className="tp-sub-value">{Math.round(dailyAverage).toLocaleString()} kWh</span>
-            </div>
-            <div className="tp-sub-stat">
-              <span className="tp-sub-label">Projected</span>
-              <span className={`tp-sub-value ${projectedProgress >= 100 ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
-                {projectedTotal.toLocaleString()} kWh
-              </span>
-            </div>
-            {monthlyTarget > 0 && (
-              <div className="tp-sub-stat">
-                <span className="tp-sub-label">Pace</span>
-                <span className={`tp-sub-value ${onPace ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
-                  {onPace ? 'On Track' : 'Behind'}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Card 2: Last Month Progress */}
@@ -293,18 +273,6 @@ const TargetProgress: React.FC = () => {
                 ) : (
                   <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
                 )}
-              </div>
-              <div className="tp-card-sub-stats">
-                <div className="tp-sub-stat">
-                  <span className="tp-sub-label">Daily Avg</span>
-                  <span className="tp-sub-value">{Math.round(lastMonthDailyAvg).toLocaleString()} kWh</span>
-                </div>
-                <div className="tp-sub-stat">
-                  <span className="tp-sub-label">Result</span>
-                  <span className={`tp-sub-value ${lastMonthProgress >= 100 ? 'tp-sub-value--on-track' : 'tp-sub-value--behind'}`}>
-                    {lastMonthProgress >= 100 ? 'Target Met' : `Missed by ${Math.round(effectiveLastMonthTarget - lastMonthProduction).toLocaleString()} kWh`}
-                  </span>
-                </div>
               </div>
             </>
           ) : (
