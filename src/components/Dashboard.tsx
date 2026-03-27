@@ -1,11 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
-  Banknote,
   Building2,
-  CalendarDays,
-  CalendarRange,
   ChevronDown,
-  Clock3,
   Download,
   FileDown,
   Globe2,
@@ -13,12 +9,9 @@ import {
   Loader2,
   LogOut,
   Moon,
-  ShieldCheck,
-  SlidersHorizontal,
   Star,
   Sun,
   X,
-  Zap,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
@@ -27,12 +20,6 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { SITES } from '../data/mockData';
-import SolarMetrics from './SolarMetrics';
-import ProductionChart from './ProductionChart';
-import LoadVsSolarChart from './LoadVsSolarChart';
-import LoadCoverage from './LoadCoverage';
-import IrradianceVsProduction from './IrradianceVsProduction';
-import FinancialMetrics from './FinancialMetrics';
 import TargetProgress from './TargetProgress';
 import TodayTab from './TodayTab';
 import ByDayTab from './ByDayTab';
@@ -69,9 +56,7 @@ const Dashboard: React.FC = () => {
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<NavTab>('Dashboard');
-  const [selectedYear, setSelectedYear] = useState('2009');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
-  const [isCardManagerOpen, setIsCardManagerOpen] = useState(false);
   const [visibleCards, setVisibleCards] = useState<Record<CardId, boolean>>(() =>
     CARD_CONFIG.reduce((acc, card) => {
       acc[card.id] = true;
@@ -80,9 +65,7 @@ const Dashboard: React.FC = () => {
   );
   const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
-  const { siteId, setSiteId, siteData, siteLabel } = useSite();
-
-  const { dailyData, currentMetrics, financialMetrics } = siteData;
+  const { siteId, setSiteId, siteLabel } = useSite();
 
   const navGroups = [
     {
@@ -100,13 +83,6 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  const availableYears = Array.from({ length: 18 }, (_, index) => String(2009 + index));
-  const totalSolar = dailyData.reduce((sum, entry) => sum + entry.solarProduction, 0);
-  const totalLoad = dailyData.reduce((sum, entry) => sum + entry.loadConsumption, 0);
-  const autarky = Math.min(Math.round((totalSolar / totalLoad) * 100), 100);
-  const feedInRevenue = +(financialMetrics.monthlyEarnings * 0.28).toFixed(2);
-  const selfConsumptionSavings = +(financialMetrics.monthlyEarnings - feedInRevenue).toFixed(2);
-  const annualYield = Math.round(currentMetrics.yearlyProduction / 12);
   const visibleCardCount = Object.values(visibleCards).filter(Boolean).length;
 
   const setCardVisibility = (cardId: CardId, isVisible: boolean) => {
