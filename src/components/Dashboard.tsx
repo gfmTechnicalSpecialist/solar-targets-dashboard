@@ -3,10 +3,7 @@ import {
   Building2,
   ChevronDown,
   Download,
-  FileDown,
-  Globe2,
   LayoutDashboard,
-  Loader2,
   LogOut,
   Moon,
   Star,
@@ -14,8 +11,6 @@ import {
   X,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
@@ -54,9 +49,7 @@ const CARD_CONFIG: Array<{ id: CardId; label: string }> = [
 
 const Dashboard: React.FC = () => {
   const dashboardRef = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<NavTab>('Dashboard');
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [visibleCards, setVisibleCards] = useState<Record<CardId, boolean>>(() =>
     CARD_CONFIG.reduce((acc, card) => {
       acc[card.id] = true;
@@ -120,51 +113,6 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const handleExportPDF = async () => {
-    if (!dashboardRef.current || exporting) return;
-    setExporting(true);
-
-    try {
-      const canvas = await html2canvas(dashboardRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: theme === 'dark' ? '#030736' : '#ececf1',
-        logging: false,
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const imgWidth = 297; // A4 landscape width in mm
-      const pageHeight = 210; // A4 landscape height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const dateStr = format(new Date(), 'yyyy-MM-dd');
-      pdf.save(`Solar-Dashboard-Report-${dateStr}.pdf`);
-    } catch (err) {
-      console.error('PDF export failed:', err);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <div className="dashboard" ref={dashboardRef}>
       <aside className="dashboard-sidebar">
@@ -223,25 +171,8 @@ const Dashboard: React.FC = () => {
                 <ChevronDown size={14} />
               </div>
             </label>
-
-            <label className="topbar-field">
-              <Globe2 size={14} />
-              <span>Language</span>
-              <div className="select-wrap">
-                <select value={selectedLanguage} onChange={(event) => setSelectedLanguage(event.target.value)}>
-                  <option>English</option>
-                  <option>German</option>
-                  <option>French</option>
-                </select>
-                <ChevronDown size={14} />
-              </div>
-            </label>
             <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <button className="btn-export" onClick={handleExportPDF} disabled={exporting}>
-              {exporting ? <Loader2 size={14} className="spin-icon" /> : <FileDown size={14} />}
-              <span>{exporting ? 'Generating' : 'Export PDF'}</span>
             </button>
             <button className="btn-signout" onClick={signOut}>
               <LogOut size={14} />
