@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
-import { Target, Settings, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import { Target, Settings, Loader2 } from 'lucide-react';
 import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
 
 const TargetProgress: React.FC = () => {
@@ -139,9 +139,6 @@ const TargetProgress: React.FC = () => {
 
   // Current month pace tracking
   const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  // Pro-rated target: where production should be by this day
-  const proRatedTarget = monthlyTarget > 0 ? (monthlyTarget / daysInCurrentMonth) * dayOfMonth : 0;
-  const onPace = currentMonthProduction >= proRatedTarget;
 
   // Last month progress
   const effectiveLastMonthTarget = lastMonthTarget ?? monthlyTarget;
@@ -219,23 +216,11 @@ const TargetProgress: React.FC = () => {
               className="tp-fill tp-fill--green"
               style={{ width: `${progressClamped}%` }}
             />
-            {monthlyTarget > 0 && (
-              <div
-                className="tp-pace-marker"
-                style={{ left: `${Math.min((proRatedTarget / monthlyTarget) * 100, 100)}%` }}
-                title={`Expected by day ${dayOfMonth}: ${Math.round(proRatedTarget).toLocaleString()} kWh`}
-              />
-            )}
           </div>
           <div className="tp-card-detail">
             <span>{currentMonthProduction.toLocaleString()} kWh</span>
             <span className="tp-bar-separator">/</span>
             <span className="tp-bar-target">{monthlyTarget.toLocaleString()} kWh</span>
-            {onPace ? (
-              <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
-            ) : (
-              <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
-            )}
           </div>
         </div>
 
@@ -263,11 +248,6 @@ const TargetProgress: React.FC = () => {
                 <span>{lastMonthProduction.toLocaleString()} kWh</span>
                 <span className="tp-bar-separator">/</span>
                 <span className="tp-bar-target">{effectiveLastMonthTarget.toLocaleString()} kWh</span>
-                {lastMonthProgress >= 100 ? (
-                  <TrendingUp size={13} className="tp-trend-icon tp-trend-up" />
-                ) : (
-                  <TrendingDown size={13} className="tp-trend-icon tp-trend-down" />
-                )}
               </div>
             </>
           ) : (
