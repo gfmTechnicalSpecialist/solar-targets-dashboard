@@ -139,10 +139,6 @@ const TargetProgress: React.FC = () => {
 
   // Current month pace tracking
   const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysWithData = currentMonthData.filter(d => d.productionKwh > 0).length;
-  const dailyAverage = daysWithData > 0 ? currentMonthProduction / daysWithData : 0;
-  const projectedTotal = Math.round(dailyAverage * daysInCurrentMonth);
-  const projectedProgress = monthlyTarget > 0 ? Math.min((projectedTotal / monthlyTarget) * 100, 999) : 0;
   // Pro-rated target: where production should be by this day
   const proRatedTarget = monthlyTarget > 0 ? (monthlyTarget / daysInCurrentMonth) * dayOfMonth : 0;
   const onPace = currentMonthProduction >= proRatedTarget;
@@ -151,7 +147,6 @@ const TargetProgress: React.FC = () => {
   const effectiveLastMonthTarget = lastMonthTarget ?? monthlyTarget;
   const lastMonthDaysTotal = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0).getDate();
   const lastMonthDaysWithData = lastMonthDataArr.filter(d => d.productionKwh > 0).length;
-  const lastMonthDailyAvg = lastMonthDaysWithData > 0 ? lastMonthProduction / lastMonthDaysWithData : 0;
   const lastMonthProgress = effectiveLastMonthTarget > 0 && lastMonthDataArr.length > 0
     ? (lastMonthProduction / effectiveLastMonthTarget) * 100 : null;
   const lastMonthClamped = lastMonthProgress !== null ? Math.min(lastMonthProgress, 100) : 0;
