@@ -259,12 +259,6 @@ const ByDayTab: React.FC = () => {
   const avgIrradiance = hasIrradiance && irradianceRaw.length > 0
     ? Math.round(irradianceRaw.reduce((s, d) => s + d.irradianceKwhM2, 0) / irradianceRaw.length * 100) / 100
     : null;
-  const bestIrrDay = hasIrradiance && irradianceRaw.length > 0
-    ? irradianceRaw.reduce((best, d) => (d.irradianceKwhM2 > best.irradianceKwhM2 ? d : best), irradianceRaw[0])
-    : null;
-  const worstIrrDay = hasIrradiance && irradianceRaw.length > 0
-    ? irradianceRaw.reduce((worst, d) => (d.irradianceKwhM2 < worst.irradianceKwhM2 ? d : worst), irradianceRaw[0])
-    : null;
   const bestDayIrr = bestDay ? (irradianceMap.get(bestDay.date) ?? null) : null;
   const worstDayIrr = worstDay ? (irradianceMap.get(worstDay.date) ?? null) : null;
 
@@ -508,23 +502,6 @@ const ByDayTab: React.FC = () => {
             </div>
           </div>
         </article>
-        <article className="overview-kpi-tile" style={{ borderLeft: '4px solid var(--chart-load)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, width: '100%' }}>
-            <div style={{
-              width: 46, height: 46, borderRadius: 12,
-              background: 'rgba(99, 102, 241, 0.12)',
-              display: 'grid', placeItems: 'center', flexShrink: 0,
-            }}>
-              <Zap size={22} style={{ color: 'var(--chart-load)' }} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="overview-kpi-value" style={{ color: 'var(--chart-load)' }}>
-                {loading ? '—' : `${avgLoad.toLocaleString()} kWh`}
-              </div>
-              <div className="overview-kpi-label">Avg Daily Consumption</div>
-            </div>
-          </div>
-        </article>
         <article className="overview-kpi-tile" style={{ borderLeft: '4px solid var(--success)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, width: '100%' }}>
             <div style={{
@@ -570,6 +547,23 @@ const ByDayTab: React.FC = () => {
                   ☀ {worstDayIrr} kWh/m²
                 </div>
               )}
+            </div>
+          </div>
+        </article>
+        <article className="overview-kpi-tile" style={{ borderLeft: '4px solid var(--chart-load)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, width: '100%' }}>
+            <div style={{
+              width: 46, height: 46, borderRadius: 12,
+              background: 'rgba(99, 102, 241, 0.12)',
+              display: 'grid', placeItems: 'center', flexShrink: 0,
+            }}>
+              <Zap size={22} style={{ color: 'var(--chart-load)' }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="overview-kpi-value" style={{ color: 'var(--chart-load)' }}>
+                {loading ? '—' : `${avgLoad.toLocaleString()} kWh`}
+              </div>
+              <div className="overview-kpi-label">Avg Daily Consumption</div>
             </div>
           </div>
         </article>
