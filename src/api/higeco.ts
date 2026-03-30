@@ -8,6 +8,10 @@ interface SiteHigecoConfig {
   loadIdLog: number;
   loadItems: number[];
   label: string;
+  weather?: {
+    idLog: number;
+    items: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -18,6 +22,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     loadIdLog: 1999098,
     loadItems: [1999098147],
     label: 'MMH Parc Du Cap',
+    weather: {
+      idLog: 2053727,
+      items: [2053727734],
+    },
   },
   centurion: {
     sn: '3363PHOGI828',
@@ -26,6 +34,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     loadIdLog: 1999433,
     loadItems: [1999433127],
     label: 'MMH Centurion',
+    weather: {
+      idLog: 2051563,
+      items: [2051563001],
+    },
   },
 };
 
@@ -238,6 +250,71 @@ export async function fetchDailyProduction(
       productionKwh: sumBucket(pvMap, pvSampleHours),
       loadKwh: sumBucket(loadMap, loadSampleHours),
       loadDuringSolarKwh: Math.round(loadDuringSolar * 10) / 10,
+    });
+  }
+
+  return results;
+}
+
+export interface DailyIrradiancePoint {
+  date: string;
+  dateLabel: string;
+  irradianceKwhM2: number;  // daily GHI in kWh/m²
+}
+
+/**
+ * Fetch daily solar irradiance (GHI) from the weather station.
+ * Integrates W/m² samples into daily kWh/m².
+ * Returns null if the site has no weather station configured.
+ */
+export async function fetchDailyIrradiance(
+  token: string,
+  days: number,
+  siteId: 'parc-du-cap' | 'centurion' = 'parc-du-cap',
+): Promise<DailyIrradiancePoint[] | null> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.weather) return null;
+
+  const now = new Date();
+  const todayStart = getSastStartOfDay(now);
+  const start = todayStart - (days - 1) * 86400;
+  const stop = todayStart + 86399;
+
+  const result = await fetchRawPowerData(
+    token, start, stop, cfg.sn,
+    cfg.weather.idLog, cfg.weather.items,
+  );
+
+  // Bucket by date — values are W/m²
+  const buckets = new Map<string, number[]>();
+  for (const p of result.points) {
+    const dateKey = timestampToSastDate(p.timestamp);
+    let arr = buckets.get(dateKey);
+    if (!arr) { arr = []; buckets.set(dateKey, arr); }
+    arr.push(p.powerKw); // stored as W/m² despite field name
+  }
+
+  const sampleHours = result.sampleTimeSec / 3600;
+
+  const results: DailyIrradiancePoint[] = [];
+  for (let d = 0; d < days; d++) {
+    const ts = start + d * 86400;
+    const dateKey = timestampToSastDate(ts);
+    const samples = buckets.get(dateKey);
+
+    // Integrate: sum(W/m² × sampleHours) / 1000 → kWh/m²
+    let dailyKwhM2 = 0;
+    if (samples) {
+      for (const wm2 of samples) {
+        dailyKwhM2 += wm2 * sampleHours;
+      }
+      dailyKwhM2 = dailyKwhM2 / 1000;
+    }
+
+    results.push({
+      date: dateKey,
+      dateLabel: formatDateLabel(dateKey),
+      irradianceKwhM2: Math.round(dailyKwhM2 * 100) / 100,
     });
   }
 

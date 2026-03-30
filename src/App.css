@@ -2186,8 +2186,8 @@
 /* CHART VARIABLE COLORS (ensure defined) */
 .dashboard-page {
   --chart-solar: #f5a623;
-  --chart-load: #6e7dab;
-  --chart-load-solar: #818cf8;
+  --chart-load: #93c5fd;
+  --chart-load-solar: #2563eb;
   --chart-net: #3ecf8e;
   --chart-production: #4f88ff;
   --chart-target: #22c55e;
@@ -2200,8 +2200,8 @@
 
 [data-theme="dark"] .dashboard-page {
   --chart-solar: #f5b942;
-  --chart-load: #8a9ac7;
-  --chart-load-solar: #a5b4fc;
+  --chart-load: #93c5fd;
+  --chart-load-solar: #3b82f6;
   --chart-net: #56d9a0;
   --chart-production: #6ba0ff;
   --chart-target: #4ade80;

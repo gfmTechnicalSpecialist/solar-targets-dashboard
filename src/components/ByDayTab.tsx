@@ -3,6 +3,8 @@ import { CalendarDays, ChevronDown, RefreshCw, AlertTriangle, Target, Loader2 } 
 import {
   BarChart,
   Bar,
+  Line,
+  ComposedChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -13,7 +15,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
-import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
+import { fetchDailyProduction, fetchDailyIrradiance, type DailyProductionPoint, type DailyIrradiancePoint } from '../api/higeco';
 import targetsConfig from '../data/targets.json';
 
 function isWeekend(dateStr: string): boolean {
@@ -29,6 +31,7 @@ const ByDayTab: React.FC = () => {
     siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
   const [range, setRange] = useState<'7' | '15' | '30'>('30');
   const [data, setData] = useState<DailyProductionPoint[]>([]);
+  const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -45,10 +48,13 @@ const ByDayTab: React.FC = () => {
     setError('');
     try {
       let result: DailyProductionPoint[];
+      let irrResult: DailyIrradiancePoint[] | null = null;
       if (siteId === 'all') {
-        const [pdc, cen] = await Promise.all([
+        const [pdc, cen, irrPdc, irrCen] = await Promise.all([
           fetchDailyProduction(user.token, daysCount, 'parc-du-cap'),
           fetchDailyProduction(user.token, daysCount, 'centurion'),
+          fetchDailyIrradiance(user.token, daysCount, 'parc-du-cap'),
+          fetchDailyIrradiance(user.token, daysCount, 'centurion'),
         ]);
         result = pdc.map((p, i) => ({
           date: p.date,
@@ -57,10 +63,25 @@ const ByDayTab: React.FC = () => {
           loadKwh: Math.round((p.loadKwh + (cen[i]?.loadKwh ?? 0)) * 10) / 10,
           loadDuringSolarKwh: Math.round((p.loadDuringSolarKwh + (cen[i]?.loadDuringSolarKwh ?? 0)) * 10) / 10,
         }));
+        // Average irradiance across sites that have it
+        const sources = [irrPdc, irrCen].filter(Boolean) as DailyIrradiancePoint[][];
+        if (sources.length > 0) {
+          irrResult = sources[0].map((p, i) => ({
+            date: p.date,
+            dateLabel: p.dateLabel,
+            irradianceKwhM2: Math.round(sources.reduce((s, src) => s + (src[i]?.irradianceKwhM2 ?? 0), 0) / sources.length * 100) / 100,
+          }));
+        }
       } else {
-        result = await fetchDailyProduction(user.token, daysCount, activeSite);
+        const [prod, irr] = await Promise.all([
+          fetchDailyProduction(user.token, daysCount, activeSite),
+          fetchDailyIrradiance(user.token, daysCount, activeSite),
+        ]);
+        result = prod;
+        irrResult = irr;
       }
       setData(result);
+      setIrradianceRaw(irrResult ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -89,13 +110,39 @@ const ByDayTab: React.FC = () => {
   const bestDay = completedDays.length > 0 ? completedDays.reduce((best, d) => (d.productionKwh > best.productionKwh ? d : best), completedDays[0]) : null;
   const worstDay = completedDays.length > 0 ? completedDays.reduce((worst, d) => (d.productionKwh < worst.productionKwh ? d : worst), completedDays[0]) : null;
 
+  // Merge production + irradiance data by date
+  const irradianceMap = new Map(irradianceRaw.map(d => [d.date, d.irradianceKwhM2]));
+  const irradianceData = enrichedData.map(d => ({
+    dateLabel: d.dateLabel,
+    date: d.date,
+    productionKwh: d.productionKwh,
+    irradiance: irradianceMap.get(d.date) ?? 0,
+  }));
+  const hasIrradiance = irradianceRaw.length > 0;
+
+  const IrradianceTooltip = ({ active, payload, label }: any) => {
+    if (active && payload?.length) {
+      const prod = payload.find((p: any) => p.dataKey === 'productionKwh')?.value ?? 0;
+      const irr = payload.find((p: any) => p.dataKey === 'irradiance')?.value ?? 0;
+      return (
+        <div className="custom-tooltip">
+          <p className="tooltip-title">{label}</p>
+          <p style={{ color: 'var(--chart-solar)' }}>Solar Production: {Math.round(prod)} kWh</p>
+          <p style={{ color: 'var(--chart-production)' }}>Irradiance (GHI): {irr} kWh/m²</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   const BarTooltip = ({ active, payload, label }: any) => {
     if (active && payload?.length) {
       const solar = payload.find((p: any) => p.dataKey === 'productionKwh')?.value ?? 0;
       const loadSolar = payload.find((p: any) => p.dataKey === 'loadDuringSolarKwh')?.value ?? 0;
       const loadOther = payload.find((p: any) => p.dataKey === 'loadOutsideSolarKwh')?.value ?? 0;
       const totalLoad = loadSolar + loadOther;
-      const coverage = totalLoad > 0 ? Math.round((solar / totalLoad) * 1000) / 10 : 0;
+      const coverageSolarHrs = loadSolar > 0 ? Math.round((solar / loadSolar) * 1000) / 10 : 0;
+      const coverageTotal = totalLoad > 0 ? Math.round((solar / totalLoad) * 1000) / 10 : 0;
       const point = data.find((d) => d.dateLabel === label);
       const isWe = point ? isWeekend(point.date) : false;
       return (
@@ -105,7 +152,8 @@ const ByDayTab: React.FC = () => {
           <p style={{ color: 'var(--chart-load-solar)' }}>Load (solar hrs): {Math.round(loadSolar)} kWh</p>
           <p style={{ color: 'var(--chart-load)' }}>Load (non-solar): {Math.round(loadOther)} kWh</p>
           <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total Load: {Math.round(totalLoad)} kWh</p>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>PV Coverage: {coverage}%</p>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>PV Coverage (solar hrs): {coverageSolarHrs}%</p>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>PV Coverage (total load): {coverageTotal}%</p>
         </div>
       );
     }
@@ -310,8 +358,8 @@ const ByDayTab: React.FC = () => {
                       strokeDasharray="8 4"
                     />
                   )}
-                  <Bar dataKey="loadDuringSolarKwh" stackId="load" name="Load (solar hrs)" fill="var(--chart-load-solar)" opacity={0.7} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="loadOutsideSolarKwh" stackId="load" name="Load (non-solar)" fill="var(--chart-load)" opacity={0.55} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="loadDuringSolarKwh" stackId="load" name="Load (solar hrs)" fill="var(--chart-load-solar)" opacity={0.85} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="loadOutsideSolarKwh" stackId="load" name="Load (non-solar)" fill="var(--chart-load)" opacity={0.7} radius={[3, 3, 0, 0]} />
                   <Bar dataKey="productionKwh" fill="var(--chart-solar)" opacity={0.92} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -344,6 +392,84 @@ const ByDayTab: React.FC = () => {
         </article>
       </section>
 
+      {/* Irradiance vs Accumulated Production */}
+      <section className="detail-grid" style={{ marginTop: 24 }}>
+        <article className="chart-card" style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>Solar Irradiance vs Accumulated Production</h3>
+            {!hasIrradiance && !loading && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No weather station data for this site</span>
+            )}
+          </div>
+          {data.length === 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: 'var(--text-muted)' }}>
+              No data available for this range.
+            </div>
+          ) : (
+            <div>
+              <ResponsiveContainer width="100%" height={340}>
+                <ComposedChart data={irradianceData} margin={{ bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis
+                    dataKey="dateLabel"
+                    stroke="var(--text-muted)"
+                    fontSize={10}
+                    tickLine={false}
+                    interval={0}
+                    angle={-45}
+                    textAnchor="end"
+                    tick={({ x, y, payload }: any) => {
+                      const point = data.find((d) => d.dateLabel === payload.value);
+                      const isWe = point ? isWeekend(point.date) : false;
+                      return (
+                        <text
+                          x={x}
+                          y={y + 4}
+                          textAnchor="end"
+                          fontSize={10}
+                          fill={isWe ? '#6366f1' : 'var(--text-muted)'}
+                          fontWeight={isWe ? 600 : 400}
+                          transform={`rotate(-45, ${x}, ${y + 4})`}
+                        >
+                          {payload.value}{isWe ? ' *' : ''}
+                        </text>
+                      );
+                    }}
+                  />
+                  <YAxis
+                    yAxisId="kwh"
+                    stroke="var(--text-muted)"
+                    fontSize={11}
+                    tickLine={false}
+                    label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { fill: 'var(--text-muted)', fontSize: 11 } }}
+                  />
+                  <YAxis
+                    yAxisId="irr"
+                    orientation="right"
+                    stroke="var(--chart-production)"
+                    fontSize={11}
+                    tickLine={false}
+                    label={{ value: 'kWh/m²', angle: 90, position: 'insideRight', style: { fill: 'var(--chart-production)', fontSize: 11 } }}
+                  />
+                  <Tooltip content={<IrradianceTooltip />} />
+                  <Bar yAxisId="kwh" dataKey="productionKwh" name="Solar Production" fill="var(--chart-solar)" opacity={0.85} radius={[3, 3, 0, 0]} />
+                  <Line yAxisId="irr" dataKey="irradiance" name="Irradiance (GHI)" stroke="var(--chart-production)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--chart-production)' }} activeDot={{ r: 5 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="chart-legend" style={{ marginTop: 12 }}>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ backgroundColor: 'var(--chart-solar)', opacity: 0.85 }} />
+                  <span>Accumulated Solar Production (kWh)</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-line" style={{ backgroundColor: 'var(--chart-production)' }} />
+                  <span>Solar Irradiance — GHI (kWh/m²)</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </article>
+      </section>
 
     </>
   );
