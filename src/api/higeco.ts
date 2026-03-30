@@ -64,6 +64,33 @@ export interface GraphDataResponse {
   dati: [number, number, string][];
 }
 
+const SESSION_EXPIRED_MESSAGE = 'Your session expired. Please sign in again.';
+
+function isSessionExpiredResponse(json: unknown): boolean {
+  if (!json || typeof json !== 'object') {
+    return false;
+  }
+
+  const response = json as {
+    ERR?: number;
+    STRERR?: string;
+    DATI?: Array<{ ERR?: number; STRERR?: string }>;
+  };
+
+  if (response.ERR === 1 && /session expired/i.test(response.STRERR ?? '')) {
+    return true;
+  }
+
+  return Array.isArray(response.DATI)
+    && response.DATI.some((entry) => entry?.ERR === 1 && /session expired/i.test(entry?.STRERR ?? ''));
+}
+
+function notifySessionExpired() {
+  window.dispatchEvent(new CustomEvent('solar-dashboard:session-expired', {
+    detail: { message: SESSION_EXPIRED_MESSAGE },
+  }));
+}
+
 /**
  * Get start-of-day (SAST) Unix timestamp for today.
  */
@@ -178,6 +205,11 @@ async function fetchRawPowerData(
   }
 
   const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
 
   const outer = json?.DATI?.[0]?.DATI;
   if (!outer?.dati) {

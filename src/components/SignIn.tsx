@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Moon } from 'lucide-react';
 
 const SignIn: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, sessionError, clearSessionError } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -16,6 +16,7 @@ const SignIn: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    clearSessionError();
 
     if (!username.trim() || !password.trim()) {
       setError('Please enter both username and password.');
@@ -49,10 +50,10 @@ const SignIn: React.FC = () => {
         </div>
 
         <form className="signin-form" onSubmit={handleSubmit}>
-          {error && (
+          {(error || sessionError) && (
             <div className="signin-error">
               <AlertCircle size={16} />
-              {error}
+              {error || sessionError}
             </div>
           )}
 

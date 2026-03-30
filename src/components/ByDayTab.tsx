@@ -230,6 +230,7 @@ const ByDayTab: React.FC = () => {
 
   const today = new Date().toISOString().slice(0, 10);
   const completedDays = data.filter((d) => d.date !== today);
+  const completedWeekdays = completedDays.filter((d) => !isWeekend(d.date));
   const totalProduction = data.reduce((s, d) => s + d.productionKwh, 0);
   const totalLoad = data.reduce((s, d) => s + d.loadKwh, 0);
 
@@ -243,7 +244,7 @@ const ByDayTab: React.FC = () => {
   const avgProduction = data.length > 0 ? Math.round((totalProduction / data.length) * 10) / 10 : 0;
   const avgLoad = data.length > 0 ? Math.round((totalLoad / data.length) * 10) / 10 : 0;
   const bestDay = completedDays.length > 0 ? completedDays.reduce((best, d) => (d.productionKwh > best.productionKwh ? d : best), completedDays[0]) : null;
-  const worstDay = completedDays.length > 0 ? completedDays.reduce((worst, d) => (d.productionKwh < worst.productionKwh ? d : worst), completedDays[0]) : null;
+  const worstDay = completedWeekdays.length > 0 ? completedWeekdays.reduce((worst, d) => (d.productionKwh < worst.productionKwh ? d : worst), completedWeekdays[0]) : null;
 
   // Merge production + irradiance data by date
   const irradianceMap = new Map(irradianceRaw.map(d => [d.date, d.irradianceKwhM2]));

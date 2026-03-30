@@ -11,14 +11,18 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  sessionError: string | null;
   signIn: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  clearSessionError: () => void;
   signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticated: false,
+  sessionError: null,
   signIn: async () => ({ success: false }),
+  clearSessionError: () => {},
   signOut: () => {},
 });
 
@@ -32,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return null;
   });
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -41,8 +46,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
+  useEffect(() => {
+    const handleSessionExpired = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setUser(null);
+      setSessionError(detail?.message || 'Your session expired. Please sign in again.');
+    };
+
+    window.addEventListener('solar-dashboard:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('solar-dashboard:session-expired', handleSessionExpired);
+  }, []);
+
   const signIn = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      setSessionError(null);
       const res = await fetch(HIGECO_GRAPHQL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const token = json.data?.req_0;
       if (token) {
+        setSessionError(null);
         setUser({ username, token });
         return { success: true };
       }
@@ -78,10 +96,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signOut = () => setUser(null);
+  const clearSessionError = () => setSessionError(null);
+
+  const signOut = () => {
+    setSessionError(null);
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, sessionError, signIn, clearSessionError, signOut }}>
       {children}
     </AuthContext.Provider>
   );
