@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
 import { Target, Loader2 } from 'lucide-react';
-import { fetchDailyProduction, type DailyProductionPoint } from '../api/higeco';
+import { fetchDailyProduction, fetchDailyIrradiance, type DailyProductionPoint, type DailyIrradiancePoint } from '../api/higeco';
 import targetsConfig from '../data/targets.json';
 
 const TargetProgress: React.FC = () => {
-  const { siteId } = useSite();
+  const { siteId, siteLabel } = useSite();
   const { user } = useAuth();
   const activeSite: 'parc-du-cap' | 'centurion' =
     siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
@@ -22,6 +22,7 @@ const TargetProgress: React.FC = () => {
   const daysToFetch = dayOfMonth + daysInLastMonth;
 
   const [data, setData] = useState<DailyProductionPoint[]>([]);
+  const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -29,10 +30,13 @@ const TargetProgress: React.FC = () => {
     setLoading(true);
     try {
       let result: DailyProductionPoint[];
+      let irrResult: DailyIrradiancePoint[] | null = null;
       if (siteId === 'all') {
-        const [pdc, cen] = await Promise.all([
+        const [pdc, cen, irrPdc, irrCen] = await Promise.all([
           fetchDailyProduction(user.token, daysToFetch, 'parc-du-cap'),
           fetchDailyProduction(user.token, daysToFetch, 'centurion'),
+          fetchDailyIrradiance(user.token, daysToFetch, 'parc-du-cap'),
+          fetchDailyIrradiance(user.token, daysToFetch, 'centurion'),
         ]);
         result = pdc.map((p, i) => ({
           date: p.date,
@@ -41,10 +45,24 @@ const TargetProgress: React.FC = () => {
           loadKwh: Math.round((p.loadKwh + (cen[i]?.loadKwh ?? 0)) * 10) / 10,
           loadDuringSolarKwh: Math.round((p.loadDuringSolarKwh + (cen[i]?.loadDuringSolarKwh ?? 0)) * 10) / 10,
         }));
+        const sources = [irrPdc, irrCen].filter(Boolean) as DailyIrradiancePoint[][];
+        if (sources.length > 0) {
+          irrResult = sources[0].map((p, i) => ({
+            date: p.date,
+            dateLabel: p.dateLabel,
+            irradianceKwhM2: Math.round(sources.reduce((s, src) => s + (src[i]?.irradianceKwhM2 ?? 0), 0) / sources.length * 100) / 100,
+          }));
+        }
       } else {
-        result = await fetchDailyProduction(user.token, daysToFetch, activeSite);
+        const [prod, irr] = await Promise.all([
+          fetchDailyProduction(user.token, daysToFetch, activeSite),
+          fetchDailyIrradiance(user.token, daysToFetch, activeSite),
+        ]);
+        result = prod;
+        irrResult = irr;
       }
       setData(result);
+      setIrradianceRaw(irrResult ?? []);
     } catch {
       // silently fail — cards will show 0 production
     } finally {
@@ -66,6 +84,16 @@ const TargetProgress: React.FC = () => {
 
   const currentMonthProduction = Math.round(currentMonthData.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
   const lastMonthProduction = Math.round(lastMonthDataArr.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10;
+
+  // Irradiance averages per month
+  const currentMonthIrr = irradianceRaw.filter(d => d.date.startsWith(currentMonthStr));
+  const lastMonthIrr = irradianceRaw.filter(d => d.date.startsWith(lastMonthStr));
+  const avgIrrCurrent = currentMonthIrr.length > 0
+    ? Math.round(currentMonthIrr.reduce((s, d) => s + d.irradianceKwhM2, 0) / currentMonthIrr.length * 100) / 100
+    : null;
+  const avgIrrLast = lastMonthIrr.length > 0
+    ? Math.round(lastMonthIrr.reduce((s, d) => s + d.irradianceKwhM2, 0) / lastMonthIrr.length * 100) / 100
+    : null;
 
   // --- Targets from config file (src/data/targets.json) ---
   const siteTargets = (targetsConfig as Record<string, Record<string, number>>)[siteId] ?? {};
@@ -92,7 +120,7 @@ const TargetProgress: React.FC = () => {
     <div className="tp-wrapper">
       {/* Header row */}
       <div className="tp-header-row">
-        <h3 className="tp-main-title"><Target size={18} /> Target Progress</h3>
+        <h3 className="tp-main-title"><Target size={18} /> Target Progress — {siteLabel}</h3>
         {monthlyTarget > 0 && (
           <span className="target-set-btn" data-active="true">
             {monthlyTarget.toLocaleString()} kWh
@@ -119,7 +147,7 @@ const TargetProgress: React.FC = () => {
             <span className="tp-bar-badge tp-bar-badge--current">Day {dayOfMonth} of {daysInCurrentMonth}</span>
           </div>
           <div className="tp-card-value tp-card-value--green">
-            {Math.round(monthlyProgress)}%
+            {(Math.floor(monthlyProgress * 10) / 10).toFixed(1)}%
           </div>
           <div className="tp-track">
             <div
@@ -132,6 +160,11 @@ const TargetProgress: React.FC = () => {
             <span className="tp-bar-separator">/</span>
             <span className="tp-bar-target">{monthlyTarget.toLocaleString()} kWh</span>
           </div>
+          {avgIrrCurrent !== null && (
+            <div style={{ padding: '4px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+              ☀ {avgIrrCurrent} kWh/m² avg irradiance
+            </div>
+          )}
         </div>
 
         {/* Card 2: Last Month Progress */}
@@ -146,7 +179,7 @@ const TargetProgress: React.FC = () => {
           {lastMonthDataArr.length > 0 && lastMonthProgress !== null ? (
             <>
               <div className={`tp-card-value ${lastMonthProgress >= 100 ? 'tp-card-value--green' : 'tp-card-value--amber'}`}>
-                {Math.round(lastMonthProgress)}%
+                {(Math.floor(lastMonthProgress * 10) / 10).toFixed(1)}%
               </div>
               <div className="tp-track">
                 <div
@@ -159,6 +192,11 @@ const TargetProgress: React.FC = () => {
                 <span className="tp-bar-separator">/</span>
                 <span className="tp-bar-target">{effectiveLastMonthTarget.toLocaleString()} kWh</span>
               </div>
+              {avgIrrLast !== null && (
+                <div style={{ padding: '4px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+                  ☀ {avgIrrLast} kWh/m² avg irradiance
+                </div>
+              )}
             </>
           ) : (
             <div className="tp-card-empty">No data available</div>

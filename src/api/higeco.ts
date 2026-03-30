@@ -87,6 +87,46 @@ function formatDateLabel(dateStr: string): string {
   return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10).toString().padStart(2, '0')}`;
 }
 
+function parseSastDateStartToUnix(dateStr: string): number {
+  const [yearRaw, monthRaw, dayRaw] = dateStr.split('-');
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!year || !month || !day) {
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+  return Math.floor((Date.UTC(year, month - 1, day) - SAST_OFFSET) / 1000);
+}
+
+interface DateWindowOptions {
+  startDate?: string;
+  endDate?: string;
+}
+
+function resolveDateWindow(days: number, options?: DateWindowOptions): { start: number; stop: number; days: number } {
+  if (options?.startDate && options?.endDate) {
+    const start = parseSastDateStartToUnix(options.startDate);
+    const endStart = parseSastDateStartToUnix(options.endDate);
+    if (endStart < start) {
+      throw new Error('End date must be on or after start date.');
+    }
+    const resolvedDays = Math.floor((endStart - start) / 86400) + 1;
+    return {
+      start,
+      stop: endStart + 86399,
+      days: resolvedDays,
+    };
+  }
+
+  const now = new Date();
+  const todayStart = getSastStartOfDay(now);
+  return {
+    start: todayStart - (days - 1) * 86400,
+    stop: todayStart + 86399,
+    days,
+  };
+}
+
 /**
  * Internal helper: fetch raw power data for a time range.
  */
@@ -158,6 +198,54 @@ async function fetchRawPowerData(
 }
 
 /**
+ * Chunked fetch: splits a long time range into ≤30-day windows so no
+ * single API call exceeds the 100 000-record limit, then merges results.
+ */
+const CHUNK_DAYS = 30;
+
+async function fetchRawPowerDataChunked(
+  token: string,
+  start: number,
+  stop: number,
+  sn: string,
+  idLog: number,
+  items: number[],
+): Promise<RawPowerResult> {
+  const totalSeconds = stop - start;
+  const chunkSeconds = CHUNK_DAYS * 86400;
+
+  // Short range — single call is fine
+  if (totalSeconds <= chunkSeconds) {
+    return fetchRawPowerData(token, start, stop, sn, idLog, items);
+  }
+
+  // Build chunk windows
+  const chunks: { start: number; stop: number }[] = [];
+  let cursor = start;
+  while (cursor <= stop) {
+    const chunkEnd = Math.min(cursor + chunkSeconds - 1, stop);
+    chunks.push({ start: cursor, stop: chunkEnd });
+    cursor = chunkEnd + 1;
+  }
+
+  // Fetch all chunks in parallel
+  const results = await Promise.all(
+    chunks.map((c) => fetchRawPowerData(token, c.start, c.stop, sn, idLog, items)),
+  );
+
+  // Merge — use sampleTimeSec from first chunk (all should be the same)
+  const merged: PowerDataPoint[] = [];
+  for (const r of results) {
+    merged.push(...r.points);
+  }
+
+  return {
+    points: merged,
+    sampleTimeSec: results[0].sampleTimeSec,
+  };
+}
+
+/**
  * Fetch today's solar power graph data using Total_PV_Active_Power / Huawei_PV_Total_Active_Power.
  */
 export async function fetchTodaySolarData(
@@ -179,18 +267,16 @@ export async function fetchDailyProduction(
   token: string,
   days: number,
   siteId: 'parc-du-cap' | 'centurion' = 'parc-du-cap',
+  options?: DateWindowOptions,
 ): Promise<DailyProductionPoint[]> {
-  const now = new Date();
-  const todayStart = getSastStartOfDay(now);
-  const start = todayStart - (days - 1) * 86400;
-  const stop = todayStart + 86399;
+  const { start, stop, days: resolvedDays } = resolveDateWindow(days, options);
 
   const cfg = SITE_HIGECO[siteId];
 
-  // Fetch PV and Load in parallel
+  // Fetch PV and Load in parallel (chunked to avoid 100k record limit)
   const [pvResult, loadResult] = await Promise.all([
-    fetchRawPowerData(token, start, stop, cfg.sn, cfg.pvTotalIdLog, cfg.pvTotalItems),
-    fetchRawPowerData(token, start, stop, cfg.sn, cfg.loadIdLog, cfg.loadItems),
+    fetchRawPowerDataChunked(token, start, stop, cfg.sn, cfg.pvTotalIdLog, cfg.pvTotalItems),
+    fetchRawPowerDataChunked(token, start, stop, cfg.sn, cfg.loadIdLog, cfg.loadItems),
   ]);
 
   // Bucket raw power samples by date
@@ -219,7 +305,7 @@ export async function fetchDailyProduction(
   };
 
   const results: DailyProductionPoint[] = [];
-  for (let d = 0; d < days; d++) {
+  for (let d = 0; d < resolvedDays; d++) {
     const ts = start + d * 86400;
     const dateKey = timestampToSastDate(ts);
 
@@ -271,16 +357,14 @@ export async function fetchDailyIrradiance(
   token: string,
   days: number,
   siteId: 'parc-du-cap' | 'centurion' = 'parc-du-cap',
+  options?: DateWindowOptions,
 ): Promise<DailyIrradiancePoint[] | null> {
   const cfg = SITE_HIGECO[siteId];
   if (!cfg.weather) return null;
 
-  const now = new Date();
-  const todayStart = getSastStartOfDay(now);
-  const start = todayStart - (days - 1) * 86400;
-  const stop = todayStart + 86399;
+  const { start, stop, days: resolvedDays } = resolveDateWindow(days, options);
 
-  const result = await fetchRawPowerData(
+  const result = await fetchRawPowerDataChunked(
     token, start, stop, cfg.sn,
     cfg.weather.idLog, cfg.weather.items,
   );
@@ -297,7 +381,7 @@ export async function fetchDailyIrradiance(
   const sampleHours = result.sampleTimeSec / 3600;
 
   const results: DailyIrradiancePoint[] = [];
-  for (let d = 0; d < days; d++) {
+  for (let d = 0; d < resolvedDays; d++) {
     const ts = start + d * 86400;
     const dateKey = timestampToSastDate(ts);
     const samples = buckets.get(dateKey);

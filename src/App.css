@@ -1946,48 +1946,50 @@
 
 .overview-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 24px;
 }
 
 .overview-kpi-tile {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
-  padding: 18px 16px;
+  border-radius: 12px;
+  padding: 22px 20px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  min-height: 100px;
 }
 
 .overview-kpi-tile:hover {
   box-shadow: var(--shadow-lg);
   border-color: rgba(242, 15, 51, 0.18);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .overview-kpi-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
 
 .overview-kpi-value {
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .overview-kpi-label {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 4px;
   font-weight: 500;
 }
 
@@ -2235,11 +2237,17 @@
 }
 
 /* RESPONSIVE — new tabs */
+@media (max-width: 1200px) {
+  .overview-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .overview-kpi-grid,
   .alltime-kpi-grid,
   .today-kpi-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .overview-panels {
