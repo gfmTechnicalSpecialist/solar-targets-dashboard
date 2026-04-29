@@ -32,12 +32,12 @@ interface AllSitesChartPoint {
 }
 
 function toSASTTimeString(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleTimeString('en-ZA', {
-    timeZone: 'Africa/Johannesburg',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  // The Higeco API returns timestamps already in SAST (UTC+2 expressed as UTC),
+  // so read UTC hours/minutes directly rather than applying a timezone conversion.
+  const d = new Date(timestamp * 1000);
+  const hh = d.getUTCHours().toString().padStart(2, '0');
+  const mm = d.getUTCMinutes().toString().padStart(2, '0');
+  return `${hh}:${mm}`;
 }
 
 function toChartData(points: PowerDataPoint[]): ChartPoint[] {
@@ -137,10 +137,8 @@ const TodayTab: React.FC = () => {
   const pdcEnergy = (allSitesData.reduce((s, p) => s + (p.parcDuCapKw ?? 0), 0) * sampleHours).toFixed(1);
   const cenEnergy = (allSitesData.reduce((s, p) => s + (p.centurionKw ?? 0), 0) * sampleHours).toFixed(1);
 
-  const currentHour = parseInt(
-    new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', hour: 'numeric', hour12: false }),
-    10
-  );
+  // Higeco timestamps are SAST-as-UTC, so use the UTC offset for the current SAST hour.
+  const currentHour = new Date().getUTCHours() + 2;
   const isGenerating = currentHour >= 6 && currentHour <= 19;
 
   const PowerTooltip = ({ active, payload, label }: any) => {
