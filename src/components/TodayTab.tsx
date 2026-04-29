@@ -31,13 +31,20 @@ interface AllSitesChartPoint {
   centurionKw: number | undefined;
 }
 
-function toChartData(points: PowerDataPoint[]): ChartPoint[] {
-  return points.map((p) => {
-    const d = new Date(p.timestamp * 1000);
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    return { time: `${hh}:${mm}`, powerKw: p.powerKw };
+function toSASTTimeString(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleTimeString('en-ZA', {
+    timeZone: 'Africa/Johannesburg',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
   });
+}
+
+function toChartData(points: PowerDataPoint[]): ChartPoint[] {
+  return points.map((p) => ({
+    time: toSASTTimeString(p.timestamp),
+    powerKw: p.powerKw,
+  }));
 }
 
 function toAllSitesChartData(pdc: PowerDataPoint[], cen: PowerDataPoint[]): AllSitesChartPoint[] {
@@ -56,16 +63,11 @@ function toAllSitesChartData(pdc: PowerDataPoint[], cen: PowerDataPoint[]): AllS
 
   return Array.from(allMinutes)
     .sort((a, b) => a - b)
-    .map((ts) => {
-      const d = new Date(ts * 1000);
-      const hh = d.getHours().toString().padStart(2, '0');
-      const mm = d.getMinutes().toString().padStart(2, '0');
-      return {
-        time: `${hh}:${mm}`,
-        parcDuCapKw: pdcByMin.get(ts),
-        centurionKw: cenByMin.get(ts),
-      };
-    });
+    .map((ts) => ({
+      time: toSASTTimeString(ts),
+      parcDuCapKw: pdcByMin.get(ts),
+      centurionKw: cenByMin.get(ts),
+    }));
 }
 
 const TodayTab: React.FC = () => {
@@ -135,7 +137,10 @@ const TodayTab: React.FC = () => {
   const pdcEnergy = (allSitesData.reduce((s, p) => s + (p.parcDuCapKw ?? 0), 0) * sampleHours).toFixed(1);
   const cenEnergy = (allSitesData.reduce((s, p) => s + (p.centurionKw ?? 0), 0) * sampleHours).toFixed(1);
 
-  const currentHour = new Date().getHours();
+  const currentHour = parseInt(
+    new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', hour: 'numeric', hour12: false }),
+    10
+  );
   const isGenerating = currentHour >= 6 && currentHour <= 19;
 
   const PowerTooltip = ({ active, payload, label }: any) => {
@@ -179,7 +184,7 @@ const TodayTab: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {lastUpdated && (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Updated {lastUpdated.toLocaleTimeString()}
+              Updated {lastUpdated.toLocaleTimeString('en-ZA', { timeZone: 'Africa/Johannesburg', hour: '2-digit', minute: '2-digit', hour12: false })} SAST
             </span>
           )}
           <button
