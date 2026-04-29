@@ -380,30 +380,46 @@ const EngineeringView: React.FC = () => {
           0% { transform: translateY(-100%); }
           100% { transform: translateY(100vh); }
         }
+        @keyframes dev-glow {
+          0%, 100% { box-shadow: 0 0 10px rgba(245,158,11,0.15); }
+          50% { box-shadow: 0 0 22px rgba(245,158,11,0.45); border-color: rgba(245,158,11,0.9); }
+        }
       `}</style>
+
+      {/* Full-width under development banner */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        background: 'repeating-linear-gradient(45deg, rgba(245,158,11,0.08), rgba(245,158,11,0.08) 10px, rgba(245,158,11,0.03) 10px, rgba(245,158,11,0.03) 20px)',
+        border: '2px solid rgba(245,158,11,0.5)',
+        borderRadius: 8,
+        padding: '12px 20px',
+        marginBottom: 20,
+      }}>
+        <Construction size={22} color="#f59e0b" style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 1 }}>🚧 This view is under development</span>
+          <span style={{ marginLeft: 12, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>All panel data is simulated. Live telemetry integration is planned for a future release.</span>
+        </div>
+        <span style={{
+          background: '#f59e0b',
+          color: '#000',
+          fontWeight: 900,
+          fontSize: '0.65rem',
+          letterSpacing: 1,
+          borderRadius: 4,
+          padding: '3px 8px',
+          textTransform: 'uppercase',
+          flexShrink: 0,
+        }}>MOCK DATA</span>
+      </div>
 
       <section className="page-heading">
         <div>
           <p className="page-kicker">Engineering</p>
           <h1>Engineering View</h1>
           <p className="page-subtitle">Panel-level telemetry — string diagrams &amp; live status</p>
-        </div>
-
-        {/* Under Development badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          background: 'rgba(245,158,11,0.12)',
-          border: '1px solid rgba(245,158,11,0.4)',
-          borderRadius: 8,
-          padding: '8px 14px',
-        }}>
-          <Construction size={16} color="#f59e0b" />
-          <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.8 }}>Under Development</div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Data shown is mock — live integration pending</div>
-          </div>
         </div>
       </section>
 
