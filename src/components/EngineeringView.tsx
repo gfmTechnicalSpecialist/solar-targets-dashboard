@@ -222,11 +222,27 @@ function StringRow({ string: str, selectedPanelId, onSelectPanel }: {
   onSelectPanel: (p: SolarPanel) => void;
 }) {
   const activePanels = str.panels.filter(p => p.status === 'active').length;
-  const hasIssue = str.panels.some(p => p.status === 'fault' || p.status === 'degraded' || p.status === 'offline');
+  const hasFault   = str.panels.some(p => p.status === 'fault');
+  const hasDegraded = str.panels.some(p => p.status === 'degraded');
+  const hasOffline  = str.panels.some(p => p.status === 'offline');
+  const hasIssue = hasFault || hasDegraded || hasOffline;
   const busColor = str.busVoltageV > 0 ? '#60a5fa' : '#64748b';
 
+  // Severity colours for the row highlight
+  const rowBorderColor = hasFault ? '#ef4444' : hasDegraded ? '#f59e0b' : '#64748b';
+  const rowBg          = hasFault ? 'rgba(239,68,68,0.09)' : hasDegraded ? 'rgba(245,158,11,0.09)' : 'rgba(100,116,139,0.07)';
+  const issueLabel     = hasFault ? 'FAULT' : hasDegraded ? 'DEGRADED' : 'OFFLINE';
+  const issueColor     = hasFault ? '#ef4444' : hasDegraded ? '#f59e0b' : '#64748b';
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+      borderRadius: 6,
+      background: hasIssue ? rowBg : 'transparent',
+      borderLeft: `3px solid ${hasIssue ? rowBorderColor : 'transparent'}`,
+      padding: hasIssue ? '5px 6px 5px 8px' : '5px 6px 5px 11px',
+      boxShadow: hasIssue ? `inset 0 0 12px ${rowBorderColor}18` : 'none',
+    }}>
       {/* String label */}
       <div style={{ width: 58, flexShrink: 0, fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'right', fontWeight: 600 }}>
         {str.label}
@@ -265,8 +281,23 @@ function StringRow({ string: str, selectedPanelId, onSelectPanel }: {
       </div>
 
       {/* Status badge */}
-      <div style={{ marginLeft: 4, fontSize: '0.6rem', color: hasIssue ? '#f59e0b' : '#22c55e', fontWeight: 600, flexShrink: 0 }}>
-        {activePanels}/{str.panels.length} ✓
+      <div style={{ marginLeft: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+        <span style={{ fontSize: '0.6rem', color: hasIssue ? issueColor : '#22c55e', fontWeight: 700 }}>
+          {activePanels}/{str.panels.length} ✓
+        </span>
+        {hasIssue && (
+          <span style={{
+            fontSize: '0.55rem', fontWeight: 800, letterSpacing: 0.8,
+            color: issueColor,
+            background: `${issueColor}22`,
+            border: `1px solid ${issueColor}66`,
+            borderRadius: 3, padding: '1px 5px',
+            textTransform: 'uppercase',
+            animation: hasFault ? 'eng-pulse 1.2s infinite' : 'none',
+          }}>
+            ⚠ {issueLabel}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -339,6 +370,73 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
     <div style={{ textAlign: 'center' }}>
       <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: '0.78rem', fontWeight: 700, color }}>{value}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Oscilloscope waveform
+// ---------------------------------------------------------------------------
+function genWave(base: number, amp: number, phase: number, n: number): number[] {
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / n;
+    return base
+      + Math.sin(t * Math.PI * 8 + phase) * amp * 0.5
+      + Math.sin(t * Math.PI * 21 + phase * 1.7) * amp * 0.2
+      + (Math.random() - 0.5) * amp * 0.12;
+  });
+}
+
+function WaveformChart({ panel, tick }: { panel: SolarPanel; tick: number }) {
+  const W = 188, H = 72, N = 60;
+  const phase = (tick * 0.9) % (Math.PI * 2);
+
+  const vPts = panel.status === 'offline'
+    ? Array(N).fill(0)
+    : genWave(panel.voltageV, panel.voltageV * 0.025, phase, N);
+  const iPts = panel.status === 'offline'
+    ? Array(N).fill(0)
+    : genWave(panel.currentA, panel.currentA * 0.04, phase + 0.5, N);
+
+  const norm = (vals: number[], pad = 5) => {
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = hi - lo || 1;
+    return vals.map(v => H - pad - ((v - lo) / span) * (H - pad * 2));
+  };
+
+  const toPath = (ys: number[]) =>
+    ys.map((y, i) => `${i === 0 ? 'M' : 'L'}${((i / (N - 1)) * W).toFixed(1)} ${y.toFixed(1)}`).join(' ');
+
+  const vY = norm(vPts);
+  const iY = norm(iPts);
+
+  return (
+    <div style={{ background: '#060d1a', borderRadius: 6, padding: '8px 6px 6px', marginTop: 12, border: '1px solid #1e293b' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
+        <span style={{ fontSize: '0.58rem', color: '#334155', textTransform: 'uppercase', letterSpacing: 0.8 }}>Waveform</span>
+        <span style={{ fontSize: '0.55rem', color: '#22c55e', animation: 'eng-pulse 2s infinite' }}>● LIVE</span>
+      </div>
+      <svg width={W} height={H} style={{ display: 'block', overflow: 'visible' }}>
+        {/* oscilloscope grid */}
+        {[0.25, 0.5, 0.75].map(f => (
+          <line key={`h${f}`} x1={0} y1={H * f} x2={W} y2={H * f} stroke="#0f172a" strokeWidth="1.5" />
+        ))}
+        {[0.2, 0.4, 0.6, 0.8].map(f => (
+          <line key={`v${f}`} x1={W * f} y1={0} x2={W * f} y2={H} stroke="#0f172a" strokeWidth="1.5" />
+        ))}
+        {/* voltage trace */}
+        <path d={toPath(vY)} fill="none" stroke="#60a5fa" strokeWidth="1.8"
+          strokeLinecap="round" strokeLinejoin="round"
+          style={{ filter: 'drop-shadow(0 0 3px #60a5fa88)' }} />
+        {/* current trace */}
+        <path d={toPath(iY)} fill="none" stroke="#a78bfa" strokeWidth="1.8"
+          strokeLinecap="round" strokeLinejoin="round"
+          style={{ filter: 'drop-shadow(0 0 3px #a78bfa88)' }} />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 5 }}>
+        <span style={{ fontSize: '0.6rem', color: '#60a5fa', fontWeight: 700 }}>— V&nbsp;{panel.voltageV}V</span>
+        <span style={{ fontSize: '0.6rem', color: '#a78bfa', fontWeight: 700 }}>— I&nbsp;{panel.currentA}A</span>
+      </div>
     </div>
   );
 }
@@ -549,6 +647,9 @@ const EngineeringView: React.FC = () => {
                   <span style={{ fontSize: '0.78rem', fontWeight: 700, color: row.color }}>{row.value}</span>
                 </div>
               ))}
+
+              {/* Waveform */}
+              <WaveformChart panel={selectedPanel} tick={tick} />
 
               {/* Mini SVG "panel" */}
               <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
