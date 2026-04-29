@@ -8,6 +8,7 @@ import {
   Moon,
   Star,
   Sun,
+  Cpu,
   X,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -21,8 +22,9 @@ import ByDayTab from './ByDayTab';
 import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
+import EngineeringView from './EngineeringView';
 
-type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download';
+type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering';
 
 type CardId =
   | 'solar-metrics'
@@ -66,6 +68,12 @@ const Dashboard: React.FC = () => {
       items: [
         { label: 'Dashboard' as NavTab, icon: LayoutDashboard },
         { label: 'Today' as NavTab, icon: Star },
+      ],
+    },
+    {
+      label: 'Technical',
+      items: [
+        { label: 'Engineering' as NavTab, icon: Cpu },
       ],
     },
     {
@@ -186,6 +194,7 @@ const Dashboard: React.FC = () => {
           {activeTab === 'By Month' && <ByMonthTab />}
           {activeTab === 'All Time' && <AllTimeTab />}
           {activeTab === 'CSV Download' && <CsvDownloadTab />}
+          {activeTab === 'Engineering' && <EngineeringView />}
 
           {activeTab === 'Dashboard' && (
             <>
