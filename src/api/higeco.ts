@@ -463,8 +463,13 @@ export interface HourlyGridEnergyPoint {
 
 /**
  * Fetch hourly grid-import energy for a given month.
- * Uses the cumulative Monthly_Grid_Active_Energy meter (period=3600).
- * Returns per-hour kWh deltas derived from consecutive readings.
+ * Uses the cumulative Monthly_Grid_Active_Energy meter with raw (period=1) readings.
+ *
+ * Raw readings are collected and binned into per-SAST-hour buckets so that:
+ *  - No energy is lost: raw[0] is treated as a delta from 0 (monthly meter reset
+ *    to 0 at midnight SAST on the 1st), capturing kWh before the first snapshot.
+ *  - TOU classification is accurate: each kWh delta is assigned to the correct
+ *    SAST hour regardless of jitter in individual reading timestamps.
  */
 export async function fetchMonthlyGridEnergyHourly(
   token: string,
@@ -477,13 +482,10 @@ export async function fetchMonthlyGridEnergyHourly(
     throw new Error(`No grid energy item configured for site: ${siteId}`);
   }
 
-  // Month boundaries in SAST (UTC+2) expressed as UTC unix timestamps
+  // Full month in SAST: midnight SAST on the 1st → 23:59:59 SAST on the last day
   const SAST_OFFSET_S = 2 * 3600;
   const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
-  const lastDay = new Date(Date.UTC(year, month, 0)); // last calendar day
-  const stopUtc = Math.floor(
-    Date.UTC(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate(), 23, 59, 59) / 1000,
-  ) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
 
   const queryPayload = JSON.stringify([
     {
@@ -495,7 +497,7 @@ export async function fetchMonthlyGridEnergyHourly(
         start: startUtc,
         stop: stopUtc,
         maxNumRecord: 100000,
-        period: '3600',
+        period: '1',          // raw readings — accurate deltas, no aggregation artefacts
         zeroTimeOffset: 0,
         items: cfg.gridEnergy.items,
       },
@@ -532,19 +534,35 @@ export async function fetchMonthlyGridEnergyHourly(
   // Sort ascending by timestamp
   raw.sort((a, b) => a[0] - b[0]);
 
-  // Compute hourly deltas from consecutive cumulative readings
-  const result: HourlyGridEnergyPoint[] = [];
+  if (raw.length === 0) return [];
+
+  // Bin kWh deltas into SAST-hour buckets.
+  // key = UTC timestamp of the start of the SAST hour, value = accumulated kWh
+  const hourlyBuckets = new Map<number, number>();
+
+  const addToSastHour = (ts: number, kwh: number) => {
+    if (kwh <= 0) return;
+    // Floor to the SAST hour boundary, then convert back to UTC
+    const sastHourStartUtc = Math.floor((ts + SAST_OFFSET_S) / 3600) * 3600 - SAST_OFFSET_S;
+    hourlyBuckets.set(sastHourStartUtc, (hourlyBuckets.get(sastHourStartUtc) ?? 0) + kwh);
+  };
+
+  // raw[0]: monthly meter started at 0 at midnight SAST, so its value IS the first delta
+  addToSastHour(raw[0][0], parseFloat(raw[0][2]) || 0);
+
+  // Subsequent readings: delta from previous cumulative reading
   for (let i = 1; i < raw.length; i++) {
     const prev = parseFloat(raw[i - 1][2]) || 0;
     const curr = parseFloat(raw[i][2])     || 0;
-    const delta = curr - prev;
-    if (delta >= 0) {
-      result.push({
-        timestamp: raw[i][0],
-        kwhDelta: Math.round(delta * 1000) / 1000,
-      });
-    }
+    addToSastHour(raw[i][0], curr - prev);
   }
+
+  // Convert to sorted array
+  const result: HourlyGridEnergyPoint[] = [];
+  for (const [ts, kwh] of hourlyBuckets) {
+    result.push({ timestamp: ts, kwhDelta: Math.round(kwh * 1000) / 1000 });
+  }
+  result.sort((a, b) => a.timestamp - b.timestamp);
 
   return result;
 }
