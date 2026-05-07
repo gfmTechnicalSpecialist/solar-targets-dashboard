@@ -351,7 +351,7 @@ export const monthlyDataByYear = allSitesMonthlyByYear;
 export const allTimeStats = allSitesAllTime;
 
 /* ============================================
-   MARCH TARIFF STATS (PV/BESS Included vs Excluded)
+   MONTHLY TARIFF STATS (PV/BESS Included vs Excluded)
    ============================================ */
 export interface TariffLineItem {
   label: string;
@@ -362,35 +362,99 @@ export interface TariffLineItem {
 }
 
 export interface TariffStats {
-  month: string;
+  monthKey: string;   // 'YYYY-MM'
+  monthLabel: string; // 'May 2026'
   lineItems: TariffLineItem[];
   total: number;
 }
 
-export const marchTariffIncluded: TariffStats = {
-  month: 'March 2026',
-  lineItems: [
-    { label: 'Network Access Charge',    unit: 'day',  qty: 31,     rate: 12.40,   amount: 384.40 },
-    { label: 'Energy — Peak',            unit: 'kWh',  qty: 820,    rate: 2.1830,  amount: 1790.06 },
-    { label: 'Energy — Standard',        unit: 'kWh',  qty: 2140,   rate: 1.4210,  amount: 3040.94 },
-    { label: 'Energy — Off-Peak',        unit: 'kWh',  qty: 1380,   rate: 0.8640,  amount: 1192.32 },
-    { label: 'Reactive Energy Charge',   unit: 'kVArh', qty: 310,   rate: 0.1520,  amount: 47.12 },
-    { label: 'Demand Charge',            unit: 'kVA',  qty: 28.4,   rate: 85.60,   amount: 2431.04 },
-    { label: 'Transmission Network',     unit: 'kWh',  qty: 4340,   rate: 0.1870,  amount: 811.58 },
-  ],
-  total: 9697.46,
+export interface MonthlyTariffEntry {
+  included: TariffStats;
+  excluded: TariffStats;
+}
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// Rates are fixed (tariff schedule)
+const RATES = {
+  access: 12.40,
+  peak: 2.1830,
+  standard: 1.4210,
+  offPeak: 0.8640,
+  reactive: 0.1520,
+  demand: 85.60,
+  transmission: 0.1870,
 };
 
-export const marchTariffExcluded: TariffStats = {
-  month: 'March 2026',
-  lineItems: [
-    { label: 'Network Access Charge',    unit: 'day',  qty: 31,     rate: 12.40,   amount: 384.40 },
-    { label: 'Energy — Peak',            unit: 'kWh',  qty: 2180,   rate: 2.1830,  amount: 4758.94 },
-    { label: 'Energy — Standard',        unit: 'kWh',  qty: 4620,   rate: 1.4210,  amount: 6565.02 },
-    { label: 'Energy — Off-Peak',        unit: 'kWh',  qty: 2560,   rate: 0.8640,  amount: 2211.84 },
-    { label: 'Reactive Energy Charge',   unit: 'kVArh', qty: 680,   rate: 0.1520,  amount: 103.36 },
-    { label: 'Demand Charge',            unit: 'kVA',  qty: 52.7,   rate: 85.60,   amount: 4511.12 },
-    { label: 'Transmission Network',     unit: 'kWh',  qty: 9360,   rate: 0.1870,  amount: 1750.32 },
-  ],
-  total: 20284.00,
+const generateTariffForMonth = (year: number, monthIdx: number): MonthlyTariffEntry => {
+  const days = DAYS_IN_MONTH[monthIdx];
+  const monthLabel = `${MONTH_NAMES_FULL[monthIdx]} ${year}`;
+  const monthKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+
+  // Seasonal factor: summer (Dec-Feb) = higher solar -> lower included grid consumption
+  const seasonFactor = 1 - 0.35 * Math.cos(((monthIdx - 5.5) / 12) * 2 * Math.PI);
+  const seed = year * 100 + monthIdx;
+  const rng = (offset: number) => 0.85 + 0.3 * Math.abs(Math.sin(seed + offset));
+
+  // Included (with PV/BESS — lower grid draw)
+  const inclPeak     = Math.round(900  * (1 - seasonFactor * 0.35) * rng(1));
+  const inclStd      = Math.round(2200 * (1 - seasonFactor * 0.30) * rng(2));
+  const inclOffPeak  = Math.round(1400 * (1 - seasonFactor * 0.20) * rng(3));
+  const inclReactive = Math.round(320  * rng(4));
+  const inclDemand   = Math.round((28 + rng(5) * 4) * 10) / 10;
+  const inclTrans    = inclPeak + inclStd + inclOffPeak;
+
+  const inclItems: TariffLineItem[] = [
+    { label: 'Network Access Charge',  unit: 'day',   qty: days,        rate: RATES.access,       amount: Math.round(days * RATES.access * 100) / 100 },
+    { label: 'Energy — Peak',          unit: 'kWh',   qty: inclPeak,    rate: RATES.peak,         amount: Math.round(inclPeak * RATES.peak * 100) / 100 },
+    { label: 'Energy — Standard',      unit: 'kWh',   qty: inclStd,     rate: RATES.standard,     amount: Math.round(inclStd * RATES.standard * 100) / 100 },
+    { label: 'Energy — Off-Peak',      unit: 'kWh',   qty: inclOffPeak, rate: RATES.offPeak,      amount: Math.round(inclOffPeak * RATES.offPeak * 100) / 100 },
+    { label: 'Reactive Energy Charge', unit: 'kVArh', qty: inclReactive, rate: RATES.reactive,    amount: Math.round(inclReactive * RATES.reactive * 100) / 100 },
+    { label: 'Demand Charge',          unit: 'kVA',   qty: inclDemand,  rate: RATES.demand,       amount: Math.round(inclDemand * RATES.demand * 100) / 100 },
+    { label: 'Transmission Network',   unit: 'kWh',   qty: inclTrans,   rate: RATES.transmission, amount: Math.round(inclTrans * RATES.transmission * 100) / 100 },
+  ];
+  const inclTotal = Math.round(inclItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+
+  // Excluded (without PV/BESS — full grid draw, ~2.4x higher consumption)
+  const exclPeak     = Math.round(inclPeak     * 2.6 * rng(6));
+  const exclStd      = Math.round(inclStd      * 2.2 * rng(7));
+  const exclOffPeak  = Math.round(inclOffPeak  * 1.9 * rng(8));
+  const exclReactive = Math.round(inclReactive * 2.1 * rng(9));
+  const exclDemand   = Math.round((inclDemand  * 1.85 + rng(10) * 3) * 10) / 10;
+  const exclTrans    = exclPeak + exclStd + exclOffPeak;
+
+  const exclItems: TariffLineItem[] = [
+    { label: 'Network Access Charge',  unit: 'day',   qty: days,        rate: RATES.access,       amount: Math.round(days * RATES.access * 100) / 100 },
+    { label: 'Energy — Peak',          unit: 'kWh',   qty: exclPeak,    rate: RATES.peak,         amount: Math.round(exclPeak * RATES.peak * 100) / 100 },
+    { label: 'Energy — Standard',      unit: 'kWh',   qty: exclStd,     rate: RATES.standard,     amount: Math.round(exclStd * RATES.standard * 100) / 100 },
+    { label: 'Energy — Off-Peak',      unit: 'kWh',   qty: exclOffPeak, rate: RATES.offPeak,      amount: Math.round(exclOffPeak * RATES.offPeak * 100) / 100 },
+    { label: 'Reactive Energy Charge', unit: 'kVArh', qty: exclReactive, rate: RATES.reactive,    amount: Math.round(exclReactive * RATES.reactive * 100) / 100 },
+    { label: 'Demand Charge',          unit: 'kVA',   qty: exclDemand,  rate: RATES.demand,       amount: Math.round(exclDemand * RATES.demand * 100) / 100 },
+    { label: 'Transmission Network',   unit: 'kWh',   qty: exclTrans,   rate: RATES.transmission, amount: Math.round(exclTrans * RATES.transmission * 100) / 100 },
+  ];
+  const exclTotal = Math.round(exclItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+
+  return {
+    included: { monthKey, monthLabel, lineItems: inclItems, total: inclTotal },
+    excluded: { monthKey, monthLabel, lineItems: exclItems, total: exclTotal },
+  };
 };
+
+// Generate last 12 months ending at current month (May 2026)
+const buildMonthlyTariffData = (): Record<string, MonthlyTariffEntry> => {
+  const result: Record<string, MonthlyTariffEntry> = {};
+  const now = new Date(2026, 4, 1); // May 2026
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    result[key] = generateTariffForMonth(d.getFullYear(), d.getMonth());
+  }
+  return result;
+};
+
+export const monthlyTariffData: Record<string, MonthlyTariffEntry> = buildMonthlyTariffData();
+
+// Keep legacy named exports pointing at March 2026
+export const marchTariffIncluded = monthlyTariffData['2026-03'].included;
+export const marchTariffExcluded = monthlyTariffData['2026-03'].excluded;
