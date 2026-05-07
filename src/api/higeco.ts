@@ -463,13 +463,11 @@ export interface HourlyGridEnergyPoint {
 
 /**
  * Fetch hourly grid-import energy for a given month.
- * Uses the cumulative Monthly_Grid_Active_Energy meter with raw (period=1) readings.
+ * Uses the cumulative Monthly_Grid_Active_Energy meter with period=3600 (hourly) readings.
  *
- * Raw readings are collected and binned into per-SAST-hour buckets so that:
- *  - No energy is lost: raw[0] is treated as a delta from 0 (monthly meter reset
- *    to 0 at midnight SAST on the 1st), capturing kWh before the first snapshot.
- *  - TOU classification is accurate: each kWh delta is assigned to the correct
- *    SAST hour regardless of jitter in individual reading timestamps.
+ * Each reading's timestamp is normalised to the start of its SAST hour (e.g. 03:21 SAST → 03:00 SAST)
+ * before binning, so TOU classification always uses clean hour boundaries.
+ * raw[0] is treated as a delta from 0 (monthly meter resets to 0 at midnight SAST on the 1st).
  */
 export async function fetchMonthlyGridEnergyHourly(
   token: string,
@@ -497,7 +495,7 @@ export async function fetchMonthlyGridEnergyHourly(
         start: startUtc,
         stop: stopUtc,
         maxNumRecord: 100000,
-        period: '1',          // raw readings — accurate deltas, no aggregation artefacts
+        period: '3600',       // hourly readings; timestamps are normalised to SAST-hour boundaries below
         zeroTimeOffset: 0,
         items: cfg.gridEnergy.items,
       },
