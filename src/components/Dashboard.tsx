@@ -23,6 +23,7 @@ import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
 import EngineeringView from './EngineeringView';
+import TariffStatsCard from './TariffStatsCard';
 type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering';
 
 type CardId =
@@ -221,6 +222,8 @@ const Dashboard: React.FC = () => {
                   {renderManagedCard('target-progress', 'Target Progress', <TargetProgress />)}
                 </div>
               </section>
+
+              <TariffStatsCard />
 
               {visibleCardCount === 0 && (
                 <section className="no-cards-state">

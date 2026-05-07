@@ -349,3 +349,48 @@ export const hourlyData = allSitesHourly;
 export const generateMonthlyData = (year: number) => generateMonthlyDataForSite(year, 2150, 2350, 2550, 0.18);
 export const monthlyDataByYear = allSitesMonthlyByYear;
 export const allTimeStats = allSitesAllTime;
+
+/* ============================================
+   MARCH TARIFF STATS (PV/BESS Included vs Excluded)
+   ============================================ */
+export interface TariffLineItem {
+  label: string;
+  unit: string;
+  qty: number;
+  rate: number;
+  amount: number;
+}
+
+export interface TariffStats {
+  month: string;
+  lineItems: TariffLineItem[];
+  total: number;
+}
+
+export const marchTariffIncluded: TariffStats = {
+  month: 'March 2026',
+  lineItems: [
+    { label: 'Network Access Charge',    unit: 'day',  qty: 31,     rate: 12.40,   amount: 384.40 },
+    { label: 'Energy — Peak',            unit: 'kWh',  qty: 820,    rate: 2.1830,  amount: 1790.06 },
+    { label: 'Energy — Standard',        unit: 'kWh',  qty: 2140,   rate: 1.4210,  amount: 3040.94 },
+    { label: 'Energy — Off-Peak',        unit: 'kWh',  qty: 1380,   rate: 0.8640,  amount: 1192.32 },
+    { label: 'Reactive Energy Charge',   unit: 'kVArh', qty: 310,   rate: 0.1520,  amount: 47.12 },
+    { label: 'Demand Charge',            unit: 'kVA',  qty: 28.4,   rate: 85.60,   amount: 2431.04 },
+    { label: 'Transmission Network',     unit: 'kWh',  qty: 4340,   rate: 0.1870,  amount: 811.58 },
+  ],
+  total: 9697.46,
+};
+
+export const marchTariffExcluded: TariffStats = {
+  month: 'March 2026',
+  lineItems: [
+    { label: 'Network Access Charge',    unit: 'day',  qty: 31,     rate: 12.40,   amount: 384.40 },
+    { label: 'Energy — Peak',            unit: 'kWh',  qty: 2180,   rate: 2.1830,  amount: 4758.94 },
+    { label: 'Energy — Standard',        unit: 'kWh',  qty: 4620,   rate: 1.4210,  amount: 6565.02 },
+    { label: 'Energy — Off-Peak',        unit: 'kWh',  qty: 2560,   rate: 0.8640,  amount: 2211.84 },
+    { label: 'Reactive Energy Charge',   unit: 'kVArh', qty: 680,   rate: 0.1520,  amount: 103.36 },
+    { label: 'Demand Charge',            unit: 'kVA',  qty: 52.7,   rate: 85.60,   amount: 4511.12 },
+    { label: 'Transmission Network',     unit: 'kWh',  qty: 9360,   rate: 0.1870,  amount: 1750.32 },
+  ],
+  total: 20284.00,
+};
