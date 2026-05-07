@@ -3,8 +3,8 @@
  * Schedule derived from billing data (March 2026, SAST UTC+2):
  *
  * Weekdays (Mon–Fri):
- *   Peak    : 06:00–08:00 and 17:00–19:00
- *   Standard: 05:00–06:00, 08:00–17:00, 19:00–22:00
+ *   Peak    : 06:00–08:00 and 17:00–20:00
+ *   Standard: 05:00–06:00, 08:00–17:00, 20:00–22:00
  *   Off-Peak: 22:00–05:00
  *
  * Saturday & Sunday:
@@ -40,14 +40,14 @@ export function classifyTouPeriod(sastHour: number, dayOfWeek: number): TouPerio
   }
 
   // Weekday (Mon–Fri)
-  // Peak: 06:00–08:00 and 17:00–19:00
-  if ((sastHour >= 6 && sastHour < 8) || (sastHour >= 17 && sastHour < 19)) return 'peak';
+  // Peak: 06:00–08:00 and 17:00–20:00
+  if ((sastHour >= 6 && sastHour < 8) || (sastHour >= 17 && sastHour < 20)) return 'peak';
 
-  // Standard: 05:00–06:00, 08:00–17:00, 19:00–22:00
+  // Standard: 05:00–06:00, 08:00–17:00, 20:00–22:00
   if (
     (sastHour >= 5 && sastHour < 6) ||
     (sastHour >= 8 && sastHour < 17) ||
-    (sastHour >= 19 && sastHour < 22)
+    (sastHour >= 20 && sastHour < 22)
   ) return 'standard';
 
   // Off-peak: 22:00–05:00
