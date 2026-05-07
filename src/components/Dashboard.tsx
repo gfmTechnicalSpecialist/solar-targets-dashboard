@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  Banknote,
   Building2,
   ChevronDown,
   Download,
@@ -24,9 +23,7 @@ import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
 import EngineeringView from './EngineeringView';
-import FinancialAnalysisTab from './FinancialAnalysisTab';
-
-type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering' | 'Financial Analysis';
+type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering';
 
 type CardId =
   | 'solar-metrics'
@@ -70,12 +67,6 @@ const Dashboard: React.FC = () => {
       items: [
         { label: 'Dashboard' as NavTab, icon: LayoutDashboard },
         { label: 'Today' as NavTab, icon: Star },
-      ],
-    },
-    {
-      label: 'Financial',
-      items: [
-        { label: 'Financial Analysis' as NavTab, icon: Banknote },
       ],
     },
     {
@@ -220,7 +211,6 @@ const Dashboard: React.FC = () => {
           {activeTab === 'All Time' && <AllTimeTab />}
           {activeTab === 'CSV Download' && <CsvDownloadTab />}
           {activeTab === 'Engineering' && <EngineeringView />}
-          {activeTab === 'Financial Analysis' && <FinancialAnalysisTab />}
 
           {activeTab === 'Dashboard' && (
             <>
