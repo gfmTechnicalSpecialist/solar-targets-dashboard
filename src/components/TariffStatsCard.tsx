@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Zap, ZapOff, TrendingDown, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
-import { monthlyTariffData, TariffStats } from '../data/mockData';
+import { monthlyTariffData } from '../data/mockData';
+import type { TariffStats } from '../data/mockData';
 
 const CURRENT_MONTH_KEY = '2026-05';
 
