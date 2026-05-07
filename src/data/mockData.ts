@@ -379,9 +379,9 @@ const MONTH_NAMES_FULL = ['January','February','March','April','May','June','Jul
 // Rates are fixed (tariff schedule)
 const RATES = {
   access: 12.40,
-  peak: 2.1830,
-  standard: 1.4210,
-  offPeak: 0.8640,
+  peak: 3.3396,     // 333.96 c/kWh
+  standard: 2.1708, // 217.08 c/kWh
+  offPeak: 1.7563,  // 175.63 c/kWh
   reactive: 0.1520,
   demand: 85.60,
   transmission: 0.1870,

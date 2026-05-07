@@ -12,6 +12,11 @@ interface SiteHigecoConfig {
     idLog: number;
     items: number[];
   };
+  /** Cumulative monthly grid-import energy meter (kWh, period=3600) */
+  gridEnergy?: {
+    idLog: number;
+    items: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -26,6 +31,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
       idLog: 2053727,
       items: [2053727734],
     },
+    gridEnergy: {
+      idLog: 1999098,
+      items: [1999098139],
+    },
   },
   centurion: {
     sn: '3363PHOGI828',
@@ -37,6 +46,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     weather: {
       idLog: 2051563,
       items: [2051563001],
+    },
+    gridEnergy: {
+      idLog: 1999433,
+      items: [1999433139],
     },
   },
 };
@@ -435,4 +448,103 @@ export async function fetchDailyIrradiance(
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Grid energy hourly fetch (cumulative kWh meter → hourly deltas)
+// ---------------------------------------------------------------------------
+
+export interface HourlyGridEnergyPoint {
+  /** UTC unix timestamp of the record (end of hour) */
+  timestamp: number;
+  /** kWh imported from grid during this hour */
+  kwhDelta: number;
+}
+
+/**
+ * Fetch hourly grid-import energy for a given month.
+ * Uses the cumulative Monthly_Grid_Active_Energy meter (period=3600).
+ * Returns per-hour kWh deltas derived from consecutive readings.
+ */
+export async function fetchMonthlyGridEnergyHourly(
+  token: string,
+  year: number,
+  month: number, // 1–12
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<HourlyGridEnergyPoint[]> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.gridEnergy) {
+    throw new Error(`No grid energy item configured for site: ${siteId}`);
+  }
+
+  // Month boundaries in SAST (UTC+2) expressed as UTC unix timestamps
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const lastDay = new Date(Date.UTC(year, month, 0)); // last calendar day
+  const stopUtc = Math.floor(
+    Date.UTC(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate(), 23, 59, 59) / 1000,
+  ) - SAST_OFFSET_S;
+
+  const queryPayload = JSON.stringify([
+    {
+      act: 'getDataLog',
+      idReq: 'graphsCall',
+      sn: cfg.sn,
+      DATI: {
+        idLog: cfg.gridEnergy.idLog,
+        start: startUtc,
+        stop: stopUtc,
+        maxNumRecord: 100000,
+        period: '3600',
+        zeroTimeOffset: 0,
+        items: cfg.gridEnergy.items,
+      },
+    },
+  ]);
+
+  const body = new URLSearchParams();
+  body.set('query', queryPayload);
+
+  const res = await fetch(EQUIPMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Higeco-Token': token,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+  const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  const outer = json?.DATI?.[0]?.DATI;
+  if (!outer?.dati) throw new Error('Unexpected response structure');
+
+  const raw: [number, number, string][] = outer.dati;
+
+  // Sort ascending by timestamp
+  raw.sort((a, b) => a[0] - b[0]);
+
+  // Compute hourly deltas from consecutive cumulative readings
+  const result: HourlyGridEnergyPoint[] = [];
+  for (let i = 1; i < raw.length; i++) {
+    const prev = parseFloat(raw[i - 1][2]) || 0;
+    const curr = parseFloat(raw[i][2])     || 0;
+    const delta = curr - prev;
+    if (delta >= 0) {
+      result.push({
+        timestamp: raw[i][0],
+        kwhDelta: Math.round(delta * 1000) / 1000,
+      });
+    }
+  }
+
+  return result;
 }
