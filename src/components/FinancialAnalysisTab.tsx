@@ -17,12 +17,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  ReferenceLine,
   Area,
   AreaChart,
-  Legend,
 } from 'recharts';
 import { useSite } from '../context/SiteContext';
 
