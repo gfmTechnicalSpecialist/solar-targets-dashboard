@@ -467,7 +467,7 @@ export interface HourlyGridEnergyPoint {
  *
  * Each reading's timestamp is normalised to the start of its SAST hour (e.g. 03:21 SAST → 03:00 SAST)
  * before binning, so TOU classification always uses clean hour boundaries.
- * raw[0] is treated as a delta from 0 (monthly meter resets to 0 at midnight SAST on the 1st).
+ * raw[0] is used as the baseline reference value; energy deltas are computed from raw[i] − raw[i−1].
  */
 export async function fetchMonthlyGridEnergyHourly(
   token: string,
@@ -545,10 +545,8 @@ export async function fetchMonthlyGridEnergyHourly(
     hourlyBuckets.set(sastHourStartUtc, (hourlyBuckets.get(sastHourStartUtc) ?? 0) + kwh);
   };
 
-  // raw[0]: monthly meter started at 0 at midnight SAST, so its value IS the first delta
-  addToSastHour(raw[0][0], parseFloat(raw[0][2]) || 0);
-
-  // Subsequent readings: delta from previous cumulative reading
+  // raw[0] is the baseline reference (cumulative kWh at the start of the query window).
+  // All energy is computed as deltas between consecutive readings.
   for (let i = 1; i < raw.length; i++) {
     const prev = parseFloat(raw[i - 1][2]) || 0;
     const curr = parseFloat(raw[i][2])     || 0;
