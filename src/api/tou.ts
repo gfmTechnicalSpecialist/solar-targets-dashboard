@@ -90,8 +90,10 @@ export function calculateTouCharges(
   for (const point of hourlyData) {
     if (point.kwhDelta <= 0) continue;
 
-    // Shift timestamp into SAST to read hour-of-day and day-of-week correctly
-    const sastDate = new Date(point.timestamp * 1000 + SAST_OFFSET_MS);
+    // Subtract 1 second so that an end-of-hour timestamp (e.g. 08:00) is
+    // treated as belonging to the hour it actually covers (07:00–08:00).
+    // Then shift into SAST to read hour-of-day and day-of-week correctly.
+    const sastDate = new Date((point.timestamp - 1) * 1000 + SAST_OFFSET_MS);
     const sastHour = sastDate.getUTCHours();
     const dayOfWeek = sastDate.getUTCDay();
 
