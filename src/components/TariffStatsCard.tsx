@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, ZapOff, TrendingDown, ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle, Wifi } from 'lucide-react';
+import { Zap, ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle, Wifi, Clock } from 'lucide-react';
 import { monthlyTariffData } from '../data/mockData';
-import type { TariffStats } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchMonthlyGridEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
@@ -14,39 +13,12 @@ const CURRENT_MONTH_KEY = '2026-05';
 // Sub-components
 // ---------------------------------------------------------------------------
 
-const MockTableBlock: React.FC<{ data: TariffStats; accent: string }> = ({ data, accent }) => (
-  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-    <thead>
-      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-        <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Line Item</th>
-        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Qty</th>
-        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Unit</th>
-        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rate (R)</th>
-        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Amount (R)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {data.lineItems.map((item) => (
-        <tr key={item.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
-          <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{item.label}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{item.qty.toLocaleString()}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{item.unit}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{item.rate.toFixed(4)}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {item.amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </td>
-        </tr>
-      ))}
-    </tbody>
-    <tfoot>
-      <tr style={{ borderTop: `2px solid ${accent}` }}>
-        <td colSpan={4} style={{ padding: '8px', fontWeight: 700, color: accent }}>Total</td>
-        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: accent, fontSize: '0.9rem' }}>
-          R{data.total.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </td>
-      </tr>
-    </tfoot>
-  </table>
+const SetupPlaceholder: React.FC = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2.5rem 1.5rem', gap: '0.6rem', textAlign: 'center', height: '100%' }}>
+    <Clock size={20} style={{ color: 'var(--text-secondary)' }} />
+    <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>Still setting up</p>
+    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>This data will appear here once configured.</p>
+  </div>
 );
 
 interface TouRow { label: string; kwh: number; rate: number; charge: number; color: string; }
@@ -133,9 +105,6 @@ const TariffStatsCard: React.FC = () => {
 
   const entry = monthlyTariffData[selectedKey];
   const included = entry.included;
-  const excluded = entry.excluded;
-  const savings = excluded.total - included.total;
-  const savingsPct = Math.round((savings / excluded.total) * 100);
 
   const currentIdx = monthKeys.indexOf(selectedKey);
   const canPrev = currentIdx > 0;
@@ -221,133 +190,47 @@ const TariffStatsCard: React.FC = () => {
         </div>
       </div>
 
-      {/* ── LIVE MODE: real TOU (included) vs mock excluded ── */}
+      {/* ── LIVE MODE ── */}
       {canFetchLive ? (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            {/* Live TOU (WITH PV/BESS) */}
-            <div className="chart-card" style={{ overflow: 'hidden' }}>
-              <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
-                  <Zap size={15} style={{ color: 'var(--success)' }} />
-                  Tariff Stats — PV/BESS Included (Live)
-                </h3>
-                {loading && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
-                  </div>
-                )}
-              </div>
-              {fetchError ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 1.25rem', color: 'var(--danger)', fontSize: '0.82rem' }}>
-                  <AlertCircle size={14} /> {fetchError}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {/* Live TOU (WITH PV/BESS) */}
+          <div className="chart-card" style={{ overflow: 'hidden' }}>
+            <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
+                <Zap size={15} style={{ color: 'var(--success)' }} />
+                Tariff Stats — PV/BESS Included (Live)
+              </h3>
+              {loading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
                 </div>
-              ) : liveBreakdown ? (
-                <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} /></div>
-              ) : !loading ? (
-                <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
-              ) : null}
+              )}
             </div>
-
-            {/* Mock excluded (WITHOUT PV/BESS) */}
-            <div className="chart-card" style={{ overflow: 'hidden' }}>
-              <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
-                  <ZapOff size={15} style={{ color: 'var(--danger)' }} />
-                  Tariff Stats — PV/BESS Excluded (Estimated)
-                </h3>
+            {fetchError ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 1.25rem', color: 'var(--danger)', fontSize: '0.82rem' }}>
+                <AlertCircle size={14} /> {fetchError}
               </div>
-              <div style={{ overflowX: 'auto' }}><MockTableBlock data={excluded} accent="var(--danger)" /></div>
-            </div>
+            ) : liveBreakdown ? (
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} /></div>
+            ) : !loading ? (
+              <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
+            ) : null}
           </div>
 
-          {/* Live savings: excluded mock total - live TOU charge */}
-          {liveBreakdown && (() => {
-            const liveEnergyCharge = liveBreakdown.totalCharge;
-            const liveDemandCharge = demandBreakdown?.demandCharge ?? 0;
-            const liveTotal = liveEnergyCharge + liveDemandCharge + SERVICE_CHARGE_EXCL_VAT;
-            const liveSavings = excluded.total - liveEnergyCharge;
-            const liveSavingsPct = Math.round((liveSavings / excluded.total) * 100);
-            return (
-              <div className="chart-card" style={{ background: 'linear-gradient(135deg, var(--success-bg, rgba(16,185,129,0.08)), var(--info-bg, rgba(59,130,246,0.08)))' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--success-bg, rgba(16,185,129,0.15))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <TrendingDown size={20} style={{ color: 'var(--success)' }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                        Total Savings — {included.monthLabel}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                        Estimated excluded (R{excluded.total.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}) − Live energy (R{liveEnergyCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}){liveDemandCharge > 0 ? ` + Demand (R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})` : ''} + Service (R{SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 800, color: liveSavings >= 0 ? 'var(--success)' : 'var(--danger)', letterSpacing: -0.5 }}>
-                      R{Math.abs(liveSavings).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div style={{ background: liveSavings >= 0 ? 'var(--success)' : 'var(--danger)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.8rem', fontWeight: 700 }}>
-                      {liveSavingsPct}% {liveSavings >= 0 ? 'reduction' : 'increase'}
-                    </div>
-                    {(liveDemandCharge > 0 || true) && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>
-                        {liveDemandCharge > 0 ? `+ R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} demand ` : ''}+ R{SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} service → total R{liveTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </>
+          {/* PV/BESS Excluded — not yet available */}
+          <div className="chart-card" style={{ overflow: 'hidden' }}>
+            <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Tariff Stats — PV/BESS Excluded</h3>
+            </div>
+            <SetupPlaceholder />
+          </div>
+        </div>
       ) : (
-        <>
-          {/* ── MOCK MODE: both tables from mock data ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div className="chart-card" style={{ overflow: 'hidden' }}>
-              <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
-                  <Zap size={15} style={{ color: 'var(--success)' }} />
-                  Tariff Stats — PV/BESS Included
-                </h3>
-              </div>
-              <div style={{ overflowX: 'auto' }}><MockTableBlock data={included} accent="var(--success)" /></div>
-            </div>
-
-            <div className="chart-card" style={{ overflow: 'hidden' }}>
-              <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
-                  <ZapOff size={15} style={{ color: 'var(--danger)' }} />
-                  Tariff Stats — PV/BESS Excluded
-                </h3>
-              </div>
-              <div style={{ overflowX: 'auto' }}><MockTableBlock data={excluded} accent="var(--danger)" /></div>
-            </div>
-          </div>
-
-          {/* Mock savings summary */}
-          <div className="chart-card" style={{ background: 'linear-gradient(135deg, var(--success-bg, rgba(16,185,129,0.08)), var(--info-bg, rgba(59,130,246,0.08)))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--success-bg, rgba(16,185,129,0.15))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TrendingDown size={20} style={{ color: 'var(--success)' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                    Total Savings — {included.monthLabel}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                    PV/BESS Excluded − PV/BESS Included
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
-                <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success)', letterSpacing: -0.5 }}>
-                  R{savings.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div style={{ background: 'var(--success)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.8rem', fontWeight: 700 }}>
+        /* ── MOCK / SIGNED-OUT MODE ── */
+        <div className="chart-card" style={{ overflow: 'hidden' }}>
+          <SetupPlaceholder />
+        </div>
+      )}
                   {savingsPct}% reduction
                 </div>
               </div>
