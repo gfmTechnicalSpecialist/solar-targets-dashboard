@@ -1,14 +1,18 @@
 /**
  * Time-of-Use (TOU) classification and charge calculation.
- * Schedule derived from billing data (March 2026, SAST UTC+2):
+ * City of Cape Town 2025/26 Medium Voltage TOU — Low Demand season (March), SAST UTC+2:
  *
  * Weekdays (Mon–Fri):
- *   Peak    : 06:00–08:00 and 17:00–20:00
- *   Standard: 05:00–06:00, 08:00–17:00, 20:00–22:00
- *   Off-Peak: 22:00–05:00
+ *   Peak    : 07:00–09:00 and 18:00–21:00
+ *   Standard: 06:00–07:00, 09:00–18:00, 21:00–22:00
+ *   Off-Peak: 22:00–06:00
  *
- * Saturday & Sunday:
- *   Standard: 17:00–19:00
+ * Saturday:
+ *   Standard: 07:00–12:00 and 18:00–20:00
+ *   Off-Peak: all other hours
+ *
+ * Sunday:
+ *   Standard: 18:00–20:00
  *   Off-Peak: all other hours
  */
 
@@ -24,8 +28,8 @@ export const DEFAULT_TOU_RATES: TouRates = {
   offpeak: 1.7563,  // 175.63 c/kWh
 };
 
-/** Monthly Eskom Megaflex demand charge rate (R/kVA) — back-calculated from March 2026 billing: R 118,474 ÷ 1,097 kVA */
-export const DEFAULT_DEMAND_RATE_PER_KVA = 107.998;
+/** Monthly CoCT MV TOU demand charge rate (R/kVA) — 2025/26 Low Demand season: R75.89 energy demand + R17.47 network capacity */
+export const DEFAULT_DEMAND_RATE_PER_KVA = 93.36;
 
 export interface DemandBreakdown {
   /** Maximum apparent power (kVA) recorded during the month */
@@ -54,24 +58,30 @@ export type TouPeriod = 'peak' | 'standard' | 'offpeak';
  *                    (0 = Sunday … 6 = Saturday)
  */
 export function classifyTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
-  // Saturday (6) and Sunday (0)
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    if (sastHour >= 17 && sastHour < 19) return 'standard';
+  // Sunday (0)
+  if (dayOfWeek === 0) {
+    if (sastHour >= 18 && sastHour < 20) return 'standard';
+    return 'offpeak';
+  }
+
+  // Saturday (6)
+  if (dayOfWeek === 6) {
+    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 18 && sastHour < 20)) return 'standard';
     return 'offpeak';
   }
 
   // Weekday (Mon–Fri)
-  // Peak: 06:00–08:00 and 17:00–20:00
-  if ((sastHour >= 6 && sastHour < 8) || (sastHour >= 17 && sastHour < 20)) return 'peak';
+  // Peak: 07:00–09:00 and 18:00–21:00
+  if ((sastHour >= 7 && sastHour < 9) || (sastHour >= 18 && sastHour < 21)) return 'peak';
 
-  // Standard: 05:00–06:00, 08:00–17:00, 20:00–22:00
+  // Standard: 06:00–07:00, 09:00–18:00, 21:00–22:00
   if (
-    (sastHour >= 5 && sastHour < 6) ||
-    (sastHour >= 8 && sastHour < 17) ||
-    (sastHour >= 20 && sastHour < 22)
+    (sastHour >= 6 && sastHour < 7) ||
+    (sastHour >= 9 && sastHour < 18) ||
+    (sastHour >= 21 && sastHour < 22)
   ) return 'standard';
 
-  // Off-peak: 22:00–05:00
+  // Off-peak: 22:00–06:00
   return 'offpeak';
 }
 
