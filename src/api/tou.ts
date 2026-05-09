@@ -24,6 +24,27 @@ export const DEFAULT_TOU_RATES: TouRates = {
   offpeak: 1.7563,  // 175.63 c/kWh
 };
 
+/** Monthly Eskom Megaflex demand charge rate (R/kVA) — back-calculated from March 2026 billing: R 118,474 ÷ 1,097 kVA */
+export const DEFAULT_DEMAND_RATE_PER_KVA = 107.998;
+
+export interface DemandBreakdown {
+  /** Maximum apparent power (kVA) recorded during the month */
+  peakKva: number;
+  /** Demand charge in Rand (peakKva × ratePerKva) */
+  demandCharge: number;
+}
+
+/** Calculate the monthly demand charge from a peak kVA reading. */
+export function calculateDemandCharge(
+  peakKva: number,
+  ratePerKva: number = DEFAULT_DEMAND_RATE_PER_KVA,
+): DemandBreakdown {
+  return {
+    peakKva,
+    demandCharge: Math.round(peakKva * ratePerKva * 100) / 100,
+  };
+}
+
 export type TouPeriod = 'peak' | 'standard' | 'offpeak';
 
 /**

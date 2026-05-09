@@ -4,9 +4,9 @@ import { monthlyTariffData } from '../data/mockData';
 import type { TariffStats } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
-import { fetchMonthlyGridEnergyHourly } from '../api/higeco';
-import { calculateTouCharges, DEFAULT_TOU_RATES } from '../api/tou';
-import type { TouBreakdown } from '../api/tou';
+import { fetchMonthlyGridEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
+import { calculateTouCharges, calculateDemandCharge, DEFAULT_TOU_RATES } from '../api/tou';
+import type { TouBreakdown, DemandBreakdown } from '../api/tou';
 
 const CURRENT_MONTH_KEY = '2026-05';
 
@@ -51,19 +51,20 @@ const MockTableBlock: React.FC<{ data: TariffStats; accent: string }> = ({ data,
 
 interface TouRow { label: string; kwh: number; rate: number; charge: number; color: string; }
 
-const LiveTouTable: React.FC<{ breakdown: TouBreakdown }> = ({ breakdown }) => {
+const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null }> = ({ breakdown, demand }) => {
   const rows: TouRow[] = [
     { label: 'Energy — Peak',     kwh: breakdown.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: breakdown.peakCharge,     color: 'var(--danger)' },
     { label: 'Energy — Standard', kwh: breakdown.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: breakdown.standardCharge, color: 'var(--warning)' },
     { label: 'Energy — Off-Peak', kwh: breakdown.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: breakdown.offpeakCharge,  color: 'var(--info)' },
   ];
+  const grandTotal = breakdown.totalCharge + (demand?.demandCharge ?? 0);
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
         <tr style={{ borderBottom: '1px solid var(--border)' }}>
           <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>TOU Period</th>
-          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>kWh</th>
-          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rate (R/kWh)</th>
+          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>kWh / kVA</th>
+          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rate (R/unit)</th>
           <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge (R)</th>
         </tr>
       </thead>
@@ -78,6 +79,18 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown }> = ({ breakdown }) => {
             </td>
           </tr>
         ))}
+        {demand != null && (
+          <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
+            <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Demand</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+              {demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA
+            </td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>107.9980</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+        )}
       </tbody>
       <tfoot>
         <tr style={{ borderTop: '2px solid var(--success)' }}>
@@ -87,7 +100,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown }> = ({ breakdown }) => {
           </td>
           <td />
           <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: 'var(--success)', fontSize: '0.9rem' }}>
-            R{breakdown.totalCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            R{grandTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </td>
         </tr>
       </tfoot>
@@ -106,6 +119,7 @@ const TariffStatsCard: React.FC = () => {
   const monthKeys = Object.keys(monthlyTariffData).sort();
   const [selectedKey, setSelectedKey] = useState(CURRENT_MONTH_KEY);
   const [liveBreakdown, setLiveBreakdown] = useState<TouBreakdown | null>(null);
+  const [demandBreakdown, setDemandBreakdown] = useState<DemandBreakdown | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -136,11 +150,19 @@ const TariffStatsCard: React.FC = () => {
     setLoading(true);
     setFetchError(null);
     setLiveBreakdown(null);
+    setDemandBreakdown(null);
 
-    fetchMonthlyGridEnergyHourly(user.token, year, month, siteId as 'parc-du-cap' | 'centurion')
-      .then((hourlyPoints) => {
-        const breakdown = calculateTouCharges(hourlyPoints);
-        setLiveBreakdown(breakdown);
+    const siteArg = siteId as 'parc-du-cap' | 'centurion';
+
+    Promise.all([
+      fetchMonthlyGridEnergyHourly(user.token, year, month, siteArg),
+      fetchMonthlyPeakDemand(user.token, year, month, siteArg).catch(() => null as null),
+    ])
+      .then(([hourlyPoints, peakKva]) => {
+        setLiveBreakdown(calculateTouCharges(hourlyPoints));
+        if (peakKva != null) {
+          setDemandBreakdown(calculateDemandCharge(peakKva));
+        }
       })
       .catch((err: Error) => {
         setFetchError(err.message ?? 'Failed to fetch grid energy data');
@@ -213,7 +235,7 @@ const TariffStatsCard: React.FC = () => {
                   <AlertCircle size={14} /> {fetchError}
                 </div>
               ) : liveBreakdown ? (
-                <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} /></div>
+                <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} /></div>
               ) : !loading ? (
                 <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
               ) : null}
@@ -233,7 +255,10 @@ const TariffStatsCard: React.FC = () => {
 
           {/* Live savings: excluded mock total - live TOU charge */}
           {liveBreakdown && (() => {
-            const liveSavings = excluded.total - liveBreakdown.totalCharge;
+            const liveEnergyCharge = liveBreakdown.totalCharge;
+            const liveDemandCharge = demandBreakdown?.demandCharge ?? 0;
+            const liveTotal = liveEnergyCharge + liveDemandCharge;
+            const liveSavings = excluded.total - liveEnergyCharge;
             const liveSavingsPct = Math.round((liveSavings / excluded.total) * 100);
             return (
               <div className="chart-card" style={{ background: 'linear-gradient(135deg, var(--success-bg, rgba(16,185,129,0.08)), var(--info-bg, rgba(59,130,246,0.08)))' }}>
@@ -247,7 +272,7 @@ const TariffStatsCard: React.FC = () => {
                         Total Savings — {included.monthLabel}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                        Estimated excluded (R{excluded.total.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}) − Live TOU (R{liveBreakdown.totalCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})
+                        Estimated excluded (R{excluded.total.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}) − Live energy (R{liveEnergyCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}){liveDemandCharge > 0 ? ` + Demand (R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})` : ''}
                       </div>
                     </div>
                   </div>
@@ -258,6 +283,11 @@ const TariffStatsCard: React.FC = () => {
                     <div style={{ background: liveSavings >= 0 ? 'var(--success)' : 'var(--danger)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.8rem', fontWeight: 700 }}>
                       {liveSavingsPct}% {liveSavings >= 0 ? 'reduction' : 'increase'}
                     </div>
+                    {liveDemandCharge > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>
+                        + R{liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} demand → total R{liveTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

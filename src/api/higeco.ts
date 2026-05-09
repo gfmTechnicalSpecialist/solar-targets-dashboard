@@ -17,6 +17,12 @@ interface SiteHigecoConfig {
     idLog: number;
     items: number[];
   };
+  /** Total Apparent Power meter used for monthly demand charges (kVA, period=1800) */
+  demand?: {
+    idLog: number;
+    items: number[];
+    period: string;
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -34,6 +40,11 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     gridEnergy: {
       idLog: 1999098,
       items: [1999098139],
+    },
+    demand: {
+      idLog: 2052549,
+      items: [2052549565],
+      period: '1800',
     },
   },
   centurion: {
@@ -561,4 +572,78 @@ export async function fetchMonthlyGridEnergyHourly(
   result.sort((a, b) => a.timestamp - b.timestamp);
 
   return result;
+}
+
+/**
+ * Fetch the monthly peak apparent power (kVA) for demand charge calculation.
+ * Uses 30-minute (period=1800) S_SUM (Total Apparent Power) readings and returns
+ * the single highest reading recorded during the month.
+ */
+export async function fetchMonthlyPeakDemand(
+  token: string,
+  year: number,
+  month: number, // 1–12
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<number> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.demand) {
+    throw new Error(`No demand item configured for site: ${siteId}`);
+  }
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const queryPayload = JSON.stringify([
+    {
+      act: 'getDataLog',
+      idReq: 'graphsCall',
+      sn: cfg.sn,
+      DATI: {
+        idLog: cfg.demand.idLog,
+        start: startUtc,
+        stop: stopUtc,
+        maxNumRecord: 100000,
+        period: cfg.demand.period,
+        zeroTimeOffset: 0,
+        items: cfg.demand.items,
+      },
+    },
+  ]);
+
+  const body = new URLSearchParams();
+  body.set('query', queryPayload);
+
+  const res = await fetch(EQUIPMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Higeco-Token': token,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+  const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  const outer = json?.DATI?.[0]?.DATI;
+  if (!outer?.dati) throw new Error('Unexpected response structure');
+
+  const raw: [number, number, string][] = outer.dati;
+
+  // Peak demand = the single highest kVA reading in the month
+  let maxKva = 0;
+  for (const [, , val] of raw) {
+    const kva = parseFloat(val) || 0;
+    if (kva > maxKva) maxKva = kva;
+  }
+
+  return Math.round(maxKva * 10) / 10;
 }
