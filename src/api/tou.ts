@@ -31,6 +31,15 @@ export const DEFAULT_TOU_RATES: TouRates = {
 /** Monthly CoCT MV TOU demand charge rate (R/kVA) — 2025/26 Low Demand season: R75.89 energy demand + R17.47 network capacity */
 export const DEFAULT_DEMAND_RATE_PER_KVA = 93.36;
 
+/**
+ * CoCT 2025/26 MV TOU fixed monthly service charge.
+ * Billed regardless of consumption (Large Power Users — TOU category).
+ * Source: City of Cape Town Service Charges schedule.
+ */
+export const SERVICE_CHARGE_EXCL_VAT = 4_669.31;  // R/month
+export const SERVICE_CHARGE_INCL_VAT = 5_369.70;  // R/month (15% VAT included)
+export const SERVICE_CHARGE_VAT_RATE = 0.15;
+
 export interface DemandBreakdown {
   /** Maximum apparent power (kVA) recorded during the month */
   peakKva: number;

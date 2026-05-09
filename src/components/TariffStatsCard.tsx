@@ -5,7 +5,7 @@ import type { TariffStats } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchMonthlyGridEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
-import { calculateTouCharges, calculateDemandCharge, DEFAULT_TOU_RATES } from '../api/tou';
+import { calculateTouCharges, calculateDemandCharge, DEFAULT_TOU_RATES, SERVICE_CHARGE_EXCL_VAT } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown } from '../api/tou';
 
 const CURRENT_MONTH_KEY = '2026-05';
@@ -57,7 +57,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
     { label: 'Energy — Standard', kwh: breakdown.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: breakdown.standardCharge, color: 'var(--warning)' },
     { label: 'Energy — Off-Peak', kwh: breakdown.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: breakdown.offpeakCharge,  color: 'var(--info)' },
   ];
-  const grandTotal = breakdown.totalCharge + (demand?.demandCharge ?? 0);
+  const grandTotal = breakdown.totalCharge + (demand?.demandCharge ?? 0) + SERVICE_CHARGE_EXCL_VAT;
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
@@ -85,12 +85,20 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
               {demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA
             </td>
-            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>107.9980</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>93.3600</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
               {demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
           </tr>
         )}
+        <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
+          <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Service</td>
+          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>1 month</td>
+          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>fixed</td>
+          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+        </tr>
       </tbody>
       <tfoot>
         <tr style={{ borderTop: '2px solid var(--success)' }}>
@@ -257,7 +265,7 @@ const TariffStatsCard: React.FC = () => {
           {liveBreakdown && (() => {
             const liveEnergyCharge = liveBreakdown.totalCharge;
             const liveDemandCharge = demandBreakdown?.demandCharge ?? 0;
-            const liveTotal = liveEnergyCharge + liveDemandCharge;
+            const liveTotal = liveEnergyCharge + liveDemandCharge + SERVICE_CHARGE_EXCL_VAT;
             const liveSavings = excluded.total - liveEnergyCharge;
             const liveSavingsPct = Math.round((liveSavings / excluded.total) * 100);
             return (
@@ -272,7 +280,7 @@ const TariffStatsCard: React.FC = () => {
                         Total Savings — {included.monthLabel}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                        Estimated excluded (R{excluded.total.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}) − Live energy (R{liveEnergyCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}){liveDemandCharge > 0 ? ` + Demand (R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})` : ''}
+                        Estimated excluded (R{excluded.total.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}) − Live energy (R{liveEnergyCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}){liveDemandCharge > 0 ? ` + Demand (R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})` : ''} + Service (R{SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})
                       </div>
                     </div>
                   </div>
@@ -283,9 +291,9 @@ const TariffStatsCard: React.FC = () => {
                     <div style={{ background: liveSavings >= 0 ? 'var(--success)' : 'var(--danger)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.8rem', fontWeight: 700 }}>
                       {liveSavingsPct}% {liveSavings >= 0 ? 'reduction' : 'increase'}
                     </div>
-                    {liveDemandCharge > 0 && (
+                    {(liveDemandCharge > 0 || true) && (
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>
-                        + R{liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} demand → total R{liveTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                        {liveDemandCharge > 0 ? `+ R${liveDemandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} demand ` : ''}+ R{SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} service → total R{liveTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                       </div>
                     )}
                   </div>
