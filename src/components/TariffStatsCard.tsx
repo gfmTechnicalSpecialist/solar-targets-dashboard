@@ -231,13 +231,6 @@ const TariffStatsCard: React.FC = () => {
           <SetupPlaceholder />
         </div>
       )}
-                  {savingsPct}% reduction
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </section>
   );
 };
