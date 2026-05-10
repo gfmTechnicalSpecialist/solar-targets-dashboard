@@ -255,7 +255,7 @@ function generatePdf(data: ReportData) {
     doc.setTextColor(...GREY);
     doc.text(`Actual: ${fmtKwh(data.solarGenerationKwh)} kWh   Target: ${fmtKwh(data.targetKwh)} kWh`, margin + 5, y + 11);
     if (targetAchievePct != null) {
-      const pctColor = targetAchievePct >= 95 ? GREEN : targetAchievePct >= 80 ? AMBER : RED;
+      const pctColor = (targetAchievePct >= 95 ? GREEN : targetAchievePct >= 80 ? AMBER : RED) as [number, number, number];
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
       doc.setTextColor(...pctColor);
@@ -380,7 +380,7 @@ function generatePdf(data: ReportData) {
     ];
     tableHeader(savCols);
 
-    const periodColors = [RED, AMBER, BLUE] as const;
+    const periodColors: [number, number, number][] = [RED as [number,number,number], AMBER as [number,number,number], BLUE as [number,number,number]];
     periods.forEach((p, i) => tableRow([
       { text: p.label, x: margin + 4,              align: 'left',  bold: true, color: periodColors[i] },
       { text: `${fmtKwh(p.kwhAvoided)} kWh`, x: margin + contentW - 116, align: 'right' },
