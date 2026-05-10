@@ -231,14 +231,13 @@ const TariffStatsCard: React.FC = () => {
           <div className="chart-card" style={{ overflow: 'hidden' }}>
             <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Tariff Stats — PV/BESS Excluded</h3>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Energy charges only</span>
             </div>
             {fetchError ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 1.25rem', color: 'var(--danger)', fontSize: '0.82rem' }}>
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : excludedBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} energyOnly /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} /></div>
             ) : !loading ? (
               <SetupPlaceholder />
             ) : null}
