@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronDown,
   Download,
+  FileText,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -23,8 +24,9 @@ import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
 import EngineeringView from './EngineeringView';
+import EnergyReportTab from './EnergyReportTab';
 import TariffStatsCard from './TariffStatsCard';
-type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering';
+type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering' | 'Energy Report';
 
 type CardId =
   | 'solar-metrics'
@@ -79,6 +81,7 @@ const Dashboard: React.FC = () => {
     {
       label: 'Misc',
       items: [
+        { label: 'Energy Report' as NavTab, icon: FileText },
         { label: 'CSV Download' as NavTab, icon: Download },
       ],
     },
@@ -210,6 +213,7 @@ const Dashboard: React.FC = () => {
           {activeTab === 'Today' && <TodayTab />}
           {activeTab === 'By Month' && <ByMonthTab />}
           {activeTab === 'All Time' && <AllTimeTab />}
+          {activeTab === 'Energy Report' && <EnergyReportTab />}
           {activeTab === 'CSV Download' && <CsvDownloadTab />}
           {activeTab === 'Engineering' && <EngineeringView />}
 
