@@ -314,7 +314,8 @@ const TariffStatsCard: React.FC = () => {
 
       {/* ── LIVE MODE ── */}
       {canFetchLive ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           {/* Live TOU (WITH PV/BESS) */}
           <div className="chart-card" style={{ overflow: 'hidden' }}>
             <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -356,10 +357,11 @@ const TariffStatsCard: React.FC = () => {
           </div>
         </div>
 
-        {/* Savings analysis — rendered once both tables have data */}
-        {liveBreakdown && excludedBreakdown && (
-          <SavingsAnalysis included={liveBreakdown} excluded={excludedBreakdown} demand={demandBreakdown} />
-        )}
+          {/* Savings analysis — rendered once both tables have data */}
+          {liveBreakdown && excludedBreakdown && (
+            <SavingsAnalysis included={liveBreakdown} excluded={excludedBreakdown} demand={demandBreakdown} />
+          )}
+        </>
       ) : (
         /* ── MOCK / SIGNED-OUT MODE ── */
         <div className="chart-card" style={{ overflow: 'hidden' }}>
