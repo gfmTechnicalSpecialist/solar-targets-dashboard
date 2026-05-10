@@ -57,9 +57,12 @@ function fmtKwh(n: number) {
 function buildMonthKeys(): string[] {
   const keys: string[] = [];
   const now = new Date();
-  for (let y = 2025; y <= now.getFullYear(); y++) {
-    const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
-    for (let m = 1; m <= maxM; m++) {
+  // Exclude the current (incomplete) month — stop at the previous completed month
+  const maxYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const maxMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // getMonth() is 0-based, so this gives last month
+  for (let y = 2025; y <= maxYear; y++) {
+    const mLimit = y === maxYear ? maxMonth : 12;
+    for (let m = 1; m <= mLimit; m++) {
       keys.push(`${y}-${String(m).padStart(2, '0')}`);
     }
   }
@@ -87,7 +90,7 @@ interface ReportData {
 function generatePdf(data: ReportData) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = 210;
-  const margin = 18;
+  const margin = 14;
   const contentW = pageW - margin * 2;
 
   const month = data.monthKey;
@@ -107,75 +110,79 @@ function generatePdf(data: ReportData) {
   const BORDER = [229, 231, 235] as const;
   const BG_LIGHT = [249, 250, 251] as const;
 
+  const ROW_H = 6;   // table body row height
+  const HDR_H = 6;   // table header height
+  const TOT_H = 7;   // total row height
+
   let y = 0;
 
   // ── HEADER BAR ──────────────────────────────────────────────────────────
   doc.setFillColor(...DARK);
-  doc.rect(0, 0, pageW, 30, 'F');
+  doc.rect(0, 0, pageW, 22, 'F');
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('MOMENTUM GROUP', margin, 11);
+  doc.setFontSize(11);
+  doc.text('MOMENTUM GROUP', margin, 9);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text('Solar Intelligence Platform', margin, 17);
+  doc.setFontSize(7);
+  doc.text('Solar Intelligence Platform', margin, 14);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text('MONTHLY ENERGY REPORT', pageW - margin, 11, { align: 'right' });
+  doc.setFontSize(10);
+  doc.text('MONTHLY ENERGY REPORT', pageW - margin, 9, { align: 'right' });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 17, { align: 'right' });
-  doc.text(`Generated: ${generatedAt}`, pageW - margin, 22, { align: 'right' });
+  doc.setFontSize(7);
+  doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
+  doc.text(`Generated: ${generatedAt}`, pageW - margin, 19, { align: 'right' });
 
-  y = 38;
+  y = 28;
 
   // ── SECTION HEADING helper ───────────────────────────────────────────────
   const section = (title: string) => {
     doc.setFillColor(...GREEN);
-    doc.rect(margin, y, 3, 6, 'F');
+    doc.rect(margin, y, 2.5, 5, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setTextColor(...DARK);
-    doc.text(title, margin + 6, y + 4.5);
-    y += 10;
+    doc.text(title, margin + 5, y + 3.6);
+    y += 8;
   };
 
   // ── KPI TILE helper ──────────────────────────────────────────────────────
-  const kpiTile = (x: number, tileW: number, label: string, value: string, sub: string, color: readonly [number, number, number]) => {
+  const kpiTile = (x: number, tileW: number, lbl: string, value: string, sub: string, color: readonly [number, number, number]) => {
     doc.setFillColor(...BG_LIGHT);
     doc.setDrawColor(...BORDER);
-    doc.roundedRect(x, y, tileW, 22, 2, 2, 'FD');
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(...GREY);
-    doc.text(label.toUpperCase(), x + 5, y + 6);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(...color);
-    doc.text(value, x + 5, y + 14);
+    doc.roundedRect(x, y, tileW, 17, 1.5, 1.5, 'FD');
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6);
     doc.setTextColor(...GREY);
-    doc.text(sub, x + 5, y + 20);
+    doc.text(lbl.toUpperCase(), x + 4, y + 5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...color);
+    doc.text(value, x + 4, y + 11.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...GREY);
+    doc.text(sub, x + 4, y + 15.5);
   };
 
   // ── TABLE helpers ────────────────────────────────────────────────────────
   const tableHeader = (cols: Array<{ label: string; x: number; align: 'left' | 'right' }>) => {
     doc.setFillColor(...DARK);
-    doc.rect(margin, y, contentW, 7, 'F');
+    doc.rect(margin, y, contentW, HDR_H, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(255, 255, 255);
     for (const col of cols) {
-      doc.text(col.label, col.x, y + 4.8, { align: col.align });
+      doc.text(col.label, col.x, y + 4.1, { align: col.align });
     }
-    y += 7;
+    y += HDR_H;
   };
 
   const tableRow = (
@@ -184,31 +191,31 @@ function generatePdf(data: ReportData) {
   ) => {
     if (shade) {
       doc.setFillColor(...BG_LIGHT);
-      doc.rect(margin, y, contentW, 7, 'F');
+      doc.rect(margin, y, contentW, ROW_H, 'F');
     }
     doc.setDrawColor(...BORDER);
-    doc.line(margin, y + 7, margin + contentW, y + 7);
-    doc.setFontSize(7.5);
+    doc.line(margin, y + ROW_H, margin + contentW, y + ROW_H);
+    doc.setFontSize(7);
     for (const col of cols) {
       doc.setFont('helvetica', col.bold ? 'bold' : 'normal');
       doc.setTextColor(...(col.color ?? DARK));
-      doc.text(col.text, col.x, y + 4.8, { align: col.align });
+      doc.text(col.text, col.x, y + 4.1, { align: col.align });
     }
-    y += 7;
+    y += ROW_H;
   };
 
-  const totalRow = (label: string, kwh: string, charge: string) => {
+  const totalRow = (lbl: string, kwh: string, charge: string) => {
     doc.setFillColor(...DARK);
-    doc.rect(margin, y, contentW, 8, 'F');
+    doc.rect(margin, y, contentW, TOT_H, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(...GREEN);
-    doc.text(label, margin + 4, y + 5.5);
+    doc.text(lbl, margin + 3, y + 4.8);
     doc.setTextColor(255, 255, 255);
-    if (kwh) doc.text(kwh, margin + contentW - 58, y + 5.5, { align: 'right' });
+    if (kwh) doc.text(kwh, margin + contentW - 52, y + 4.8, { align: 'right' });
     doc.setTextColor(...GREEN);
-    doc.text(charge, margin + contentW - 2, y + 5.5, { align: 'right' });
-    y += 8;
+    doc.text(charge, margin + contentW - 2, y + 4.8, { align: 'right' });
+    y += TOT_H;
   };
 
   // ── DERIVED VALUES ───────────────────────────────────────────────────────
@@ -228,201 +235,309 @@ function generatePdf(data: ReportData) {
   // ── SECTION 1: Executive Summary ─────────────────────────────────────────
   section('Executive Summary');
 
-  const tileW = (contentW - 9) / 4;
-  kpiTile(margin,                     tileW, 'Grid Import',      `${fmtKwh(gridImport)} kWh`, 'energy drawn from grid', DARK);
-  kpiTile(margin + tileW + 3,         tileW, 'Self-Supply',      `${selfSupplyPct.toFixed(1)}%`, `${fmtKwh(selfSupplyKwh)} kWh via PV/BESS`, BLUE);
-  kpiTile(margin + (tileW + 3) * 2,   tileW, 'Bill (with PV)',   fmtR(inclTotal), 'excl. VAT', GREEN);
-  kpiTile(margin + (tileW + 3) * 3,   tileW,
+  const tileW = (contentW - 6) / 4;
+  kpiTile(margin,                     tileW, 'Grid Import',    `${fmtKwh(gridImport)} kWh`,    'energy drawn from grid',           DARK);
+  kpiTile(margin + tileW + 2,         tileW, 'Self-Supply',    `${selfSupplyPct.toFixed(1)}%`,  `${fmtKwh(selfSupplyKwh)} kWh via PV/BESS`, BLUE);
+  kpiTile(margin + (tileW + 2) * 2,   tileW, 'Bill (with PV)', fmtR(inclTotal),                 'excl. VAT',                        GREEN);
+  kpiTile(margin + (tileW + 2) * 3,   tileW,
     totalSavings != null ? 'Bill Saving' : 'Demand Peak',
     totalSavings != null ? fmtR(totalSavings) : (data.demand ? `${data.demand.peakKva} kVA` : '—'),
     totalSavings != null ? `${savingsPct!.toFixed(1)}% of grid-only bill` : 'peak apparent power',
     totalSavings != null ? GREEN : AMBER,
   );
 
-  y += 26;
+  y += 19;
 
-  // Solar target row
+  // Solar target row (single compact line)
   if (data.solarGenerationKwh > 0 || data.targetKwh > 0) {
     doc.setFillColor(...BG_LIGHT);
     doc.setDrawColor(...BORDER);
-    doc.roundedRect(margin, y, contentW, 14, 2, 2, 'FD');
+    doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...DARK);
-    doc.text('Solar Generation vs Target', margin + 5, y + 5.5);
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
+    doc.setTextColor(...DARK);
+    doc.text('Solar Generation vs Target', margin + 4, y + 4.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
     doc.setTextColor(...GREY);
-    doc.text(`Actual: ${fmtKwh(data.solarGenerationKwh)} kWh   Target: ${fmtKwh(data.targetKwh)} kWh`, margin + 5, y + 11);
+    doc.text(`Actual: ${fmtKwh(data.solarGenerationKwh)} kWh   Target: ${fmtKwh(data.targetKwh)} kWh`, margin + 4, y + 8.2);
     if (targetAchievePct != null) {
       const pctColor = (targetAchievePct >= 95 ? GREEN : targetAchievePct >= 80 ? AMBER : RED) as [number, number, number];
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
       doc.setTextColor(...pctColor);
-      doc.text(`${targetAchievePct.toFixed(1)}% of target`, pageW - margin - 5, y + 8.5, { align: 'right' });
+      doc.text(`${targetAchievePct.toFixed(1)}% of target`, pageW - margin - 4, y + 6.5, { align: 'right' });
     }
-    y += 20;
+    y += 14;
   } else {
-    y += 4;
+    y += 3;
   }
 
-  // ── SECTION 2: TOU Billing — With PV/BESS ───────────────────────────────
-  section('TOU Billing — With PV/BESS (Grid Import)');
-
-  const cols = [
-    { label: 'TOU Period',     x: margin + 4,              align: 'left'  as const },
-    { label: 'Energy (kWh)',   x: margin + contentW - 90,  align: 'right' as const },
-    { label: 'Rate (R/kWh)',   x: margin + contentW - 58,  align: 'right' as const },
-    { label: 'Charge (R)',     x: margin + contentW - 2,   align: 'right' as const },
-  ];
-  tableHeader(cols);
-
-  const inclRows = [
-    { label: 'Energy — Peak',     kwh: data.included.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: data.included.peakCharge,     color: RED },
-    { label: 'Energy — Standard', kwh: data.included.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: data.included.standardCharge, color: AMBER },
-    { label: 'Energy — Off-Peak', kwh: data.included.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: data.included.offpeakCharge,  color: BLUE },
-  ];
-  inclRows.forEach((row, i) => tableRow([
-    { text: row.label,                      x: margin + 4,              align: 'left',  bold: true, color: row.color },
-    { text: `${fmtKwh(row.kwh)}`,           x: margin + contentW - 90,  align: 'right' },
-    { text: row.rate.toFixed(4),            x: margin + contentW - 58,  align: 'right' },
-    { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
-  ], i % 2 === 1));
-
-  if (data.demand) {
-    tableRow([
-      { text: 'Demand',              x: margin + 4,              align: 'left',  bold: true },
-      { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + contentW - 90, align: 'right' },
-      { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(4), x: margin + contentW - 58,  align: 'right' },
-      { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
-    ], false);
-  }
-  tableRow([
-    { text: 'Monthly Service Charge', x: margin + 4,             align: 'left',  bold: true },
-    { text: '1 month',                x: margin + contentW - 90, align: 'right' },
-    { text: 'fixed',                  x: margin + contentW - 58, align: 'right' },
-    { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
-  ], true);
-
-  totalRow(
-    'TOTAL (excl. VAT)',
-    `${fmtKwh(data.included.totalEnergyKwh)} kWh`,
-    fmtR(inclTotal),
-  );
-
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(6.5);
-  doc.setTextColor(...GREY);
-  doc.text(`VAT (15%): ${fmtR(r2(inclTotal * 0.15))}   Total incl. VAT: ${fmtR(r2(inclTotal * 1.15))}   (Service charge VAT: ${fmtR(SERVICE_CHARGE_INCL_VAT - SERVICE_CHARGE_EXCL_VAT)})`, margin, y + 4);
-  y += 10;
-
-  // ── SECTION 3: TOU Billing — Without PV/BESS ────────────────────────────
+  // ── BILLING TABLES SIDE BY SIDE ──────────────────────────────────────────
+  // Render both billing tables in two columns to save vertical space
   if (data.excluded) {
-    section('TOU Billing — Without PV/BESS (Total Load)');
+    const halfW = (contentW - 4) / 2;
+    const col2X = margin + halfW + 4;
+
+    // Shared columns for both halves
+    const mkCols = (ox: number, w: number) => [
+      { label: 'Period',     x: ox + 3,          align: 'left'  as const },
+      { label: 'kWh',        x: ox + w - 48,     align: 'right' as const },
+      { label: 'Rate',       x: ox + w - 26,     align: 'right' as const },
+      { label: 'Charge (R)', x: ox + w,          align: 'right' as const },
+    ];
+
+    // For a two-column table we need custom row renderers scoped to a half
+    const halfHeader = (ox: number, w: number, title: string) => {
+      // Title bar above header
+      doc.setFillColor(...DARK);
+      doc.rect(ox, y, w, 5.5, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text(title, ox + 3, y + 3.9);
+    };
+
+    const halfColHeader = (ox: number, w: number) => {
+      const cols = mkCols(ox, w);
+      doc.setFillColor(40, 55, 80);
+      doc.rect(ox, y, w, HDR_H - 1, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+      doc.setTextColor(200, 210, 220);
+      for (const col of cols) {
+        doc.text(col.label, col.x, y + 3.8, { align: col.align });
+      }
+    };
+
+    const halfRow = (
+      ox: number, w: number,
+      cells: Array<{ text: string; x: number; align: 'left' | 'right'; bold?: boolean; color?: readonly [number, number, number] }>,
+      shade: boolean,
+    ) => {
+      if (shade) { doc.setFillColor(...BG_LIGHT); doc.rect(ox, y, w, ROW_H, 'F'); }
+      doc.setDrawColor(...BORDER);
+      doc.line(ox, y + ROW_H, ox + w, y + ROW_H);
+      doc.setFontSize(6.5);
+      for (const col of cells) {
+        doc.setFont('helvetica', col.bold ? 'bold' : 'normal');
+        doc.setTextColor(...(col.color ?? DARK));
+        doc.text(col.text, col.x, y + 4.1, { align: col.align });
+      }
+    };
+
+    const halfTotal = (ox: number, w: number, kwh: string, charge: string) => {
+      doc.setFillColor(...DARK);
+      doc.rect(ox, y, w, TOT_H, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(255, 255, 255);
+      if (kwh) doc.text(kwh, ox + w - 48, y + 4.8, { align: 'right' });
+      doc.setTextColor(...GREEN);
+      doc.text(charge, ox + w, y + 4.8, { align: 'right' });
+    };
+
+    // Snapshot y so both columns start at the same point
+    const yStart = y;
+
+    // ── LEFT: With PV/BESS ────────────────────────────────────────────────
+    halfHeader(margin, halfW, 'With PV/BESS — Grid Import');
+    const yAfterTitleL = y + 5.5;
+    y = yAfterTitleL;
+    halfColHeader(margin, halfW);
+    y += HDR_H - 1;
+
+    const inclRows = [
+      { label: 'Peak',     kwh: data.included.peakKwh,     charge: data.included.peakCharge,     color: RED },
+      { label: 'Standard', kwh: data.included.standardKwh, charge: data.included.standardCharge, color: AMBER },
+      { label: 'Off-Peak', kwh: data.included.offpeakKwh,  charge: data.included.offpeakCharge,  color: BLUE },
+    ];
+    inclRows.forEach((row, i) => {
+      halfRow(margin, halfW, [
+        { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
+        { text: fmtKwh(row.kwh), x: margin + halfW - 48, align: 'right' },
+        { text: DEFAULT_TOU_RATES[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: margin + halfW - 26, align: 'right' },
+        { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
+      ], i % 2 === 1);
+      y += ROW_H;
+    });
+    if (data.demand) {
+      halfRow(margin, halfW, [
+        { text: 'Demand', x: margin + 3, align: 'left', bold: true },
+        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + halfW - 48, align: 'right' },
+        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(2), x: margin + halfW - 26, align: 'right' },
+        { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
+      ], false);
+      y += ROW_H;
+    }
+    halfRow(margin, halfW, [
+      { text: 'Service', x: margin + 3, align: 'left', bold: true },
+      { text: '1 month', x: margin + halfW - 48, align: 'right' },
+      { text: 'fixed', x: margin + halfW - 26, align: 'right' },
+      { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
+    ], true);
+    y += ROW_H;
+    halfTotal(margin, halfW, `${fmtKwh(data.included.totalEnergyKwh)} kWh`, fmtR(inclTotal));
+    const yAfterL = y + TOT_H;
+
+    // ── RIGHT: Without PV/BESS ────────────────────────────────────────────
+    y = yStart;
+    halfHeader(col2X, halfW, 'Without PV/BESS — Total Load');
+    y = yAfterTitleL;
+    halfColHeader(col2X, halfW);
+    y += HDR_H - 1;
+
+    const exclRowsData = [
+      { label: 'Peak',     kwh: data.excluded.peakKwh,     charge: data.excluded.peakCharge,     color: RED },
+      { label: 'Standard', kwh: data.excluded.standardKwh, charge: data.excluded.standardCharge, color: AMBER },
+      { label: 'Off-Peak', kwh: data.excluded.offpeakKwh,  charge: data.excluded.offpeakCharge,  color: BLUE },
+    ];
+    exclRowsData.forEach((row, i) => {
+      halfRow(col2X, halfW, [
+        { text: row.label, x: col2X + 3, align: 'left', bold: true, color: row.color },
+        { text: fmtKwh(row.kwh), x: col2X + halfW - 48, align: 'right' },
+        { text: DEFAULT_TOU_RATES[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: col2X + halfW - 26, align: 'right' },
+        { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
+      ], i % 2 === 1);
+      y += ROW_H;
+    });
+    if (data.demand) {
+      halfRow(col2X, halfW, [
+        { text: 'Demand', x: col2X + 3, align: 'left', bold: true },
+        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: col2X + halfW - 48, align: 'right' },
+        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(2), x: col2X + halfW - 26, align: 'right' },
+        { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
+      ], false);
+      y += ROW_H;
+    }
+    halfRow(col2X, halfW, [
+      { text: 'Service', x: col2X + 3, align: 'left', bold: true },
+      { text: '1 month', x: col2X + halfW - 48, align: 'right' },
+      { text: 'fixed', x: col2X + halfW - 26, align: 'right' },
+      { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
+    ], true);
+    y += ROW_H;
+    halfTotal(col2X, halfW, `${fmtKwh(data.excluded.totalEnergyKwh)} kWh`, fmtR(exclTotal!));
+
+    y = Math.max(yAfterL, y + TOT_H);
+
+    // VAT footnote
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(6);
+    doc.setTextColor(...GREY);
+    doc.text(`With PV incl. VAT: ${fmtR(r2(inclTotal * 1.15))}   Without PV incl. VAT: ${fmtR(r2(exclTotal! * 1.15))}   Service charge VAT: ${fmtR(SERVICE_CHARGE_INCL_VAT - SERVICE_CHARGE_EXCL_VAT)}`, margin, y + 3.5);
+    y += 7;
+
+  } else {
+    // Single billing table fallback (no excluded data)
+    section('TOU Billing — With PV/BESS (Grid Import)');
+
+    const cols = [
+      { label: 'TOU Period',   x: margin + 3,             align: 'left'  as const },
+      { label: 'Energy (kWh)', x: margin + contentW - 84, align: 'right' as const },
+      { label: 'Rate (R/kWh)', x: margin + contentW - 52, align: 'right' as const },
+      { label: 'Charge (R)',   x: margin + contentW - 2,  align: 'right' as const },
+    ];
     tableHeader(cols);
 
-    const exclRows = [
-      { label: 'Energy — Peak',     kwh: data.excluded.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: data.excluded.peakCharge,     color: RED },
-      { label: 'Energy — Standard', kwh: data.excluded.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: data.excluded.standardCharge, color: AMBER },
-      { label: 'Energy — Off-Peak', kwh: data.excluded.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: data.excluded.offpeakCharge,  color: BLUE },
-    ];
-    exclRows.forEach((row, i) => tableRow([
-      { text: row.label,                      x: margin + 4,              align: 'left',  bold: true, color: row.color },
-      { text: `${fmtKwh(row.kwh)}`,           x: margin + contentW - 90,  align: 'right' },
-      { text: row.rate.toFixed(4),            x: margin + contentW - 58,  align: 'right' },
+    [
+      { label: 'Energy — Peak',     kwh: data.included.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: data.included.peakCharge,     color: RED },
+      { label: 'Energy — Standard', kwh: data.included.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: data.included.standardCharge, color: AMBER },
+      { label: 'Energy — Off-Peak', kwh: data.included.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: data.included.offpeakCharge,  color: BLUE },
+    ].forEach((row, i) => tableRow([
+      { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
+      { text: fmtKwh(row.kwh), x: margin + contentW - 84, align: 'right' },
+      { text: row.rate.toFixed(4), x: margin + contentW - 52, align: 'right' },
       { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
     ], i % 2 === 1));
 
     if (data.demand) {
       tableRow([
-        { text: 'Demand',              x: margin + 4,              align: 'left',  bold: true },
-        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + contentW - 90, align: 'right' },
-        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(4),  x: margin + contentW - 58, align: 'right' },
+        { text: 'Demand', x: margin + 3, align: 'left', bold: true },
+        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + contentW - 84, align: 'right' },
+        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(4), x: margin + contentW - 52, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
       ], false);
     }
     tableRow([
-      { text: 'Monthly Service Charge', x: margin + 4,             align: 'left',  bold: true },
-      { text: '1 month',                x: margin + contentW - 90, align: 'right' },
-      { text: 'fixed',                  x: margin + contentW - 58, align: 'right' },
+      { text: 'Service Charge', x: margin + 3, align: 'left', bold: true },
+      { text: '1 month', x: margin + contentW - 84, align: 'right' },
+      { text: 'fixed', x: margin + contentW - 52, align: 'right' },
       { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
     ], true);
 
-    totalRow(
-      'TOTAL (excl. VAT)',
-      `${fmtKwh(data.excluded.totalEnergyKwh)} kWh`,
-      fmtR(exclTotal!),
-    );
+    totalRow('TOTAL (excl. VAT)', `${fmtKwh(data.included.totalEnergyKwh)} kWh`, fmtR(inclTotal));
 
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(6.5);
+    doc.setFontSize(6);
     doc.setTextColor(...GREY);
-    doc.text(`VAT (15%): ${fmtR(r2(exclTotal! * 0.15))}   Total incl. VAT: ${fmtR(r2(exclTotal! * 1.15))}`, margin, y + 4);
-    y += 10;
+    doc.text(`VAT (15%): ${fmtR(r2(inclTotal * 0.15))}   Incl. VAT: ${fmtR(r2(inclTotal * 1.15))}`, margin, y + 3.5);
+    y += 7;
   }
 
-  // ── SECTION 4: Savings Analysis ──────────────────────────────────────────
+  // ── SECTION: Savings Analysis ─────────────────────────────────────────────
   if (data.excluded && totalSavings != null) {
     section('PV/BESS Savings Analysis');
 
     const periods = [
-      { label: 'Peak',      exclC: data.excluded.peakCharge,     inclC: data.included.peakCharge,     exclK: data.excluded.peakKwh,     inclK: data.included.peakKwh },
-      { label: 'Standard',  exclC: data.excluded.standardCharge, inclC: data.included.standardCharge, exclK: data.excluded.standardKwh, inclK: data.included.standardKwh },
-      { label: 'Off-Peak',  exclC: data.excluded.offpeakCharge,  inclC: data.included.offpeakCharge,  exclK: data.excluded.offpeakKwh,  inclK: data.included.offpeakKwh },
+      { label: 'Peak',     exclC: data.excluded.peakCharge,     inclC: data.included.peakCharge,     exclK: data.excluded.peakKwh,     inclK: data.included.peakKwh },
+      { label: 'Standard', exclC: data.excluded.standardCharge, inclC: data.included.standardCharge, exclK: data.excluded.standardKwh, inclK: data.included.standardKwh },
+      { label: 'Off-Peak', exclC: data.excluded.offpeakCharge,  inclC: data.included.offpeakCharge,  exclK: data.excluded.offpeakKwh,  inclK: data.included.offpeakKwh },
     ].map(p => ({ ...p, saved: r2(p.exclC - p.inclC), kwhAvoided: r2(p.exclK - p.inclK) }));
 
     const savCols = [
-      { label: 'Period',           x: margin + 4,              align: 'left'  as const },
-      { label: 'kWh Avoided',      x: margin + contentW - 116, align: 'right' as const },
-      { label: 'Grid-only (R)',    x: margin + contentW - 78,  align: 'right' as const },
-      { label: 'With PV/BESS (R)', x: margin + contentW - 38,  align: 'right' as const },
-      { label: 'Saved (R)',        x: margin + contentW - 2,   align: 'right' as const },
+      { label: 'Period',            x: margin + 3,              align: 'left'  as const },
+      { label: 'kWh Avoided',       x: margin + contentW - 110, align: 'right' as const },
+      { label: 'Grid-only (R)',      x: margin + contentW - 74,  align: 'right' as const },
+      { label: 'With PV/BESS (R)',   x: margin + contentW - 36,  align: 'right' as const },
+      { label: 'Saved (R)',          x: margin + contentW - 2,   align: 'right' as const },
     ];
     tableHeader(savCols);
 
     const periodColors: [number, number, number][] = [RED as [number,number,number], AMBER as [number,number,number], BLUE as [number,number,number]];
     periods.forEach((p, i) => tableRow([
-      { text: p.label, x: margin + 4,              align: 'left',  bold: true, color: periodColors[i] },
-      { text: `${fmtKwh(p.kwhAvoided)} kWh`, x: margin + contentW - 116, align: 'right' },
-      { text: p.exclC.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 78, align: 'right' },
-      { text: p.inclC.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 38, align: 'right' },
+      { text: p.label, x: margin + 3, align: 'left', bold: true, color: periodColors[i] },
+      { text: `${fmtKwh(p.kwhAvoided)} kWh`, x: margin + contentW - 110, align: 'right' },
+      { text: p.exclC.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 74, align: 'right' },
+      { text: p.inclC.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 36, align: 'right' },
       { text: p.saved.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2,  align: 'right', bold: true, color: p.saved >= 0 ? GREEN : RED },
     ], i % 2 === 1));
 
     const energySavings = r2(periods.reduce((s, p) => s + p.saved, 0));
     totalRow('ENERGY SAVINGS', '', fmtR(energySavings));
 
-    // Summary box
-    y += 4;
+    // Compact summary strip
+    y += 2;
     doc.setFillColor(220, 252, 231);
     doc.setDrawColor(...GREEN);
-    doc.roundedRect(margin, y, contentW, 18, 2, 2, 'FD');
+    doc.roundedRect(margin, y, contentW, 14, 1.5, 1.5, 'FD');
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...DARK);
-    doc.text('Total Bill Saving (energy only, same demand + service both scenarios):', margin + 5, y + 6);
-    doc.setFontSize(13);
-    doc.setTextColor(...GREEN);
-    doc.text(fmtR(totalSavings), margin + 5, y + 14);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...GREY);
-    doc.text(`${savingsPct!.toFixed(1)}% reduction vs grid-only bill`, margin + contentW - 5, y + 10, { align: 'right' });
     doc.setFontSize(7);
-    doc.text(`Self-supply: ${selfSupplyPct.toFixed(1)}%  (${fmtKwh(selfSupplyKwh)} kWh of ${fmtKwh(totalLoad)} kWh total load)`, margin + contentW - 5, y + 15, { align: 'right' });
-    y += 24;
+    doc.setTextColor(...DARK);
+    doc.text('Total Bill Saving:', margin + 4, y + 5);
+    doc.setFontSize(12);
+    doc.setTextColor(...GREEN);
+    doc.text(fmtR(totalSavings), margin + 4, y + 11.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...GREY);
+    doc.text(`${savingsPct!.toFixed(1)}% reduction vs grid-only`, pageW - margin - 4, y + 5.5, { align: 'right' });
+    doc.setFontSize(6.5);
+    doc.text(`Self-supply: ${selfSupplyPct.toFixed(1)}%  (${fmtKwh(selfSupplyKwh)} kWh of ${fmtKwh(totalLoad)} kWh total load)`, pageW - margin - 4, y + 11, { align: 'right' });
+    y += 18;
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────────────
   const pageH = 297;
   doc.setDrawColor(...BORDER);
-  doc.line(margin, pageH - 14, pageW - margin, pageH - 14);
+  doc.line(margin, pageH - 12, pageW - margin, pageH - 12);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
+  doc.setFontSize(6);
   doc.setTextColor(...GREY);
-  doc.text('City of Cape Town 2025/26 MV TOU — Low Demand season rates applied. Charges exclude VAT unless stated.', margin, pageH - 9);
-  doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 9, { align: 'right' });
+  doc.text('CoCT 2025/26 MV TOU — Low Demand season rates. Charges exclude VAT unless stated.', margin, pageH - 7.5);
+  doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 7.5, { align: 'right' });
 
   doc.save(`Energy-Report_${data.siteLabel.replace(/\s+/g, '-')}_${month}.pdf`);
 }
