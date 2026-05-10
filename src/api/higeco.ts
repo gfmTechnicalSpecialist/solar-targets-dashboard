@@ -23,6 +23,11 @@ interface SiteHigecoConfig {
     items: number[];
     period: string;
   };
+  /** Cumulative total-load energy meter (kWh, period=3600) — used for PV/BESS-excluded TOU calculation */
+  loadEnergy?: {
+    idLog: number;
+    items: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -45,6 +50,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
       idLog: 2052549,
       items: [2052549565],
       period: '1800',
+    },
+    loadEnergy: {
+      idLog: 1999098,
+      items: [1999098148],
     },
   },
   centurion: {
@@ -565,6 +574,96 @@ export async function fetchMonthlyGridEnergyHourly(
   }
 
   // Convert to sorted array
+  const result: HourlyGridEnergyPoint[] = [];
+  for (const [ts, kwh] of hourlyBuckets) {
+    result.push({ timestamp: ts, kwhDelta: Math.round(kwh * 1000) / 1000 });
+  }
+  result.sort((a, b) => a.timestamp - b.timestamp);
+
+  return result;
+}
+
+/**
+ * Fetch hourly Total Load Active Energy (kWh) for the given month.
+ * Uses the same cumulative-delta approach as fetchMonthlyGridEnergyHourly but
+ * reads the Total_Load_Active_Energy item — i.e. the full site load regardless
+ * of PV/BESS contribution.  Used to compute the "PV/BESS Excluded" TOU bill.
+ */
+export async function fetchMonthlyLoadEnergyHourly(
+  token: string,
+  year: number,
+  month: number, // 1–12
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<HourlyGridEnergyPoint[]> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.loadEnergy) {
+    throw new Error(`No load energy item configured for site: ${siteId}`);
+  }
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const queryPayload = JSON.stringify([
+    {
+      act: 'getDataLog',
+      idReq: 'graphsCall',
+      sn: cfg.sn,
+      DATI: {
+        idLog: cfg.loadEnergy.idLog,
+        start: startUtc,
+        stop: stopUtc,
+        maxNumRecord: 100000,
+        period: '3600',
+        zeroTimeOffset: 0,
+        items: cfg.loadEnergy.items,
+      },
+    },
+  ]);
+
+  const body = new URLSearchParams();
+  body.set('query', queryPayload);
+
+  const res = await fetch(EQUIPMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Higeco-Token': token,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+  const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  const outer = json?.DATI?.[0]?.DATI;
+  if (!outer?.dati) throw new Error('Unexpected response structure');
+
+  const raw: [number, number, string][] = outer.dati;
+  raw.sort((a, b) => a[0] - b[0]);
+
+  if (raw.length === 0) return [];
+
+  const hourlyBuckets = new Map<number, number>();
+  const addToSastHour = (ts: number, kwh: number) => {
+    if (kwh <= 0) return;
+    const sastHourStartUtc = Math.floor((ts + SAST_OFFSET_S) / 3600) * 3600 - SAST_OFFSET_S;
+    hourlyBuckets.set(sastHourStartUtc, (hourlyBuckets.get(sastHourStartUtc) ?? 0) + kwh);
+  };
+
+  for (let i = 1; i < raw.length; i++) {
+    const prev = parseFloat(raw[i - 1][2]) || 0;
+    const curr = parseFloat(raw[i][2])     || 0;
+    addToSastHour(raw[i][0], curr - prev);
+  }
+
   const result: HourlyGridEnergyPoint[] = [];
   for (const [ts, kwh] of hourlyBuckets) {
     result.push({ timestamp: ts, kwhDelta: Math.round(kwh * 1000) / 1000 });

@@ -3,7 +3,7 @@ import { Zap, ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle, Wifi,
 import { monthlyTariffData } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
-import { fetchMonthlyGridEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
+import { fetchMonthlyGridEnergyHourly, fetchMonthlyLoadEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
 import { calculateTouCharges, calculateDemandCharge, DEFAULT_TOU_RATES, SERVICE_CHARGE_EXCL_VAT } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown } from '../api/tou';
 
@@ -23,13 +23,15 @@ const SetupPlaceholder: React.FC = () => (
 
 interface TouRow { label: string; kwh: number; rate: number; charge: number; color: string; }
 
-const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null }> = ({ breakdown, demand }) => {
+const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null; energyOnly?: boolean }> = ({ breakdown, demand, energyOnly }) => {
   const rows: TouRow[] = [
     { label: 'Energy — Peak',     kwh: breakdown.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: breakdown.peakCharge,     color: 'var(--danger)' },
     { label: 'Energy — Standard', kwh: breakdown.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: breakdown.standardCharge, color: 'var(--warning)' },
     { label: 'Energy — Off-Peak', kwh: breakdown.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: breakdown.offpeakCharge,  color: 'var(--info)' },
   ];
-  const grandTotal = breakdown.totalCharge + (demand?.demandCharge ?? 0) + SERVICE_CHARGE_EXCL_VAT;
+  const grandTotal = energyOnly
+    ? breakdown.totalCharge
+    : breakdown.totalCharge + (demand?.demandCharge ?? 0) + SERVICE_CHARGE_EXCL_VAT;
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
@@ -51,7 +53,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             </td>
           </tr>
         ))}
-        {demand != null && (
+        {!energyOnly && demand != null && (
           <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
             <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Demand</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
@@ -63,14 +65,16 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             </td>
           </tr>
         )}
-        <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
-          <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Service</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>1 month</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>fixed</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </td>
-        </tr>
+        {!energyOnly && (
+          <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
+            <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Service</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>1 month</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>fixed</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+        )}
       </tbody>
       <tfoot>
         <tr style={{ borderTop: '2px solid var(--success)' }}>
@@ -99,6 +103,7 @@ const TariffStatsCard: React.FC = () => {
   const monthKeys = Object.keys(monthlyTariffData).sort();
   const [selectedKey, setSelectedKey] = useState(CURRENT_MONTH_KEY);
   const [liveBreakdown, setLiveBreakdown] = useState<TouBreakdown | null>(null);
+  const [excludedBreakdown, setExcludedBreakdown] = useState<TouBreakdown | null>(null);
   const [demandBreakdown, setDemandBreakdown] = useState<DemandBreakdown | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -127,6 +132,7 @@ const TariffStatsCard: React.FC = () => {
     setLoading(true);
     setFetchError(null);
     setLiveBreakdown(null);
+    setExcludedBreakdown(null);
     setDemandBreakdown(null);
 
     const siteArg = siteId as 'parc-du-cap' | 'centurion';
@@ -134,11 +140,15 @@ const TariffStatsCard: React.FC = () => {
     Promise.all([
       fetchMonthlyGridEnergyHourly(user.token, year, month, siteArg),
       fetchMonthlyPeakDemand(user.token, year, month, siteArg).catch(() => null as null),
+      fetchMonthlyLoadEnergyHourly(user.token, year, month, siteArg).catch(() => null as null),
     ])
-      .then(([hourlyPoints, peakKva]) => {
+      .then(([hourlyPoints, peakKva, loadPoints]) => {
         setLiveBreakdown(calculateTouCharges(hourlyPoints));
         if (peakKva != null) {
           setDemandBreakdown(calculateDemandCharge(peakKva));
+        }
+        if (loadPoints != null) {
+          setExcludedBreakdown(calculateTouCharges(loadPoints));
         }
       })
       .catch((err: Error) => {
@@ -217,12 +227,21 @@ const TariffStatsCard: React.FC = () => {
             ) : null}
           </div>
 
-          {/* PV/BESS Excluded — not yet available */}
+          {/* PV/BESS Excluded — total load energy */}
           <div className="chart-card" style={{ overflow: 'hidden' }}>
             <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Tariff Stats — PV/BESS Excluded</h3>
+              <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Tariff Stats — PV/BESS Excluded</h3>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Energy charges only</span>
             </div>
-            <SetupPlaceholder />
+            {fetchError ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 1.25rem', color: 'var(--danger)', fontSize: '0.82rem' }}>
+                <AlertCircle size={14} /> {fetchError}
+              </div>
+            ) : excludedBreakdown ? (
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} energyOnly /></div>
+            ) : !loading ? (
+              <SetupPlaceholder />
+            ) : null}
           </div>
         </div>
       ) : (
