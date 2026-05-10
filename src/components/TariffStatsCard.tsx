@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle, Wifi, Clock } from 'lucide-react';
+import { Zap, TrendingDown, ChevronLeft, ChevronRight, Calendar, RefreshCw, AlertCircle, Wifi, Clock } from 'lucide-react';
 import { monthlyTariffData } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
@@ -89,6 +89,118 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
         </tr>
       </tfoot>
     </table>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Savings analysis card
+// ---------------------------------------------------------------------------
+
+interface SavingsAnalysisProps {
+  included: TouBreakdown;
+  excluded: TouBreakdown;
+  demand: DemandBreakdown | null;
+}
+
+const SavingsAnalysis: React.FC<SavingsAnalysisProps> = ({ included, excluded, demand }) => {
+  const demandCharge = demand?.demandCharge ?? 0;
+
+  const inclTotal = included.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT;
+  const exclTotal = excluded.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT;
+  const totalSavings = exclTotal - inclTotal;
+  const savingsPct = exclTotal > 0 ? (totalSavings / exclTotal) * 100 : 0;
+
+  const totalLoadKwh = excluded.totalEnergyKwh;
+  const gridImportKwh = included.totalEnergyKwh;
+  const selfSupplyKwh = Math.max(0, totalLoadKwh - gridImportKwh);
+  const selfSupplyPct = totalLoadKwh > 0 ? (selfSupplyKwh / totalLoadKwh) * 100 : 0;
+
+  const periods = [
+    { label: 'Peak',     color: 'var(--danger)',  exclKwh: excluded.peakKwh,     inclKwh: included.peakKwh,     exclCharge: excluded.peakCharge,     inclCharge: included.peakCharge },
+    { label: 'Standard', color: 'var(--warning)', exclKwh: excluded.standardKwh, inclKwh: included.standardKwh, exclCharge: excluded.standardCharge, inclCharge: included.standardCharge },
+    { label: 'Off-Peak', color: 'var(--info)',    exclKwh: excluded.offpeakKwh,  inclKwh: included.offpeakKwh,  exclCharge: excluded.offpeakCharge,  inclCharge: included.offpeakCharge },
+  ].map(p => ({
+    ...p,
+    kwhAvoided: p.exclKwh - p.inclKwh,
+    rSaved: p.exclCharge - p.inclCharge,
+    pctOfTotal: totalSavings > 0 ? ((p.exclCharge - p.inclCharge) / totalSavings) * 100 : 0,
+  }));
+
+  const bestPeriod = [...periods].sort((a, b) => b.rSaved - a.rSaved)[0];
+
+  const kpi = (label: string, value: string, sub: string, valueColor = 'var(--success)') => (
+    <div>
+      <p style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 0.25rem' }}>{label}</p>
+      <p style={{ fontSize: '1.35rem', fontWeight: 700, color: valueColor, margin: 0 }}>{value}</p>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0.1rem 0 0' }}>{sub}</p>
+    </div>
+  );
+
+  return (
+    <div className="chart-card" style={{ marginTop: '1rem', overflow: 'hidden' }}>
+      <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontSize: '0.9rem' }}>
+          <TrendingDown size={15} style={{ color: 'var(--success)' }} />
+          PV/BESS Savings Analysis
+        </h3>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Grid-only bill vs actual bill with PV/BESS</span>
+      </div>
+
+      {/* KPI tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+        {kpi('Monthly Saving', `R${totalSavings.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'excl. VAT — versus grid-only bill')}
+        {kpi('Bill Reduction', `${savingsPct.toFixed(1)}%`, 'of total bill offset by PV/BESS')}
+        {kpi('Self-Supply Rate', `${selfSupplyPct.toFixed(1)}%`, `${Math.round(selfSupplyKwh).toLocaleString('en-ZA')} kWh of ${Math.round(totalLoadKwh).toLocaleString('en-ZA')} kWh load`, 'var(--info)')}
+      </div>
+
+      {/* Per-period breakdown table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th style={{ textAlign: 'left',  padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Period</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>kWh Avoided</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Grid-only (R)</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>With PV/BESS (R)</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Saved (R)</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map(p => (
+              <tr key={p.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', background: p.label === bestPeriod.label ? 'rgba(16,185,129,0.05)' : undefined }}>
+                <td style={{ padding: '6px 8px', color: p.color, fontWeight: 600 }}>
+                  {p.label}
+                  {p.label === bestPeriod.label && (
+                    <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>BEST</span>
+                  )}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {p.kwhAvoided.toLocaleString('en-ZA', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {p.exclCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {p.inclCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: p.rSaved >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  {p.rSaved.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                    <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, Math.max(0, p.pctOfTotal))}%`, height: '100%', background: p.color, borderRadius: 3 }} />
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', minWidth: '2.5rem', textAlign: 'right' }}>{p.pctOfTotal.toFixed(0)}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 };
 
@@ -243,6 +355,11 @@ const TariffStatsCard: React.FC = () => {
             ) : null}
           </div>
         </div>
+
+        {/* Savings analysis — rendered once both tables have data */}
+        {liveBreakdown && excludedBreakdown && (
+          <SavingsAnalysis included={liveBreakdown} excluded={excludedBreakdown} demand={demandBreakdown} />
+        )}
       ) : (
         /* ── MOCK / SIGNED-OUT MODE ── */
         <div className="chart-card" style={{ overflow: 'hidden' }}>
