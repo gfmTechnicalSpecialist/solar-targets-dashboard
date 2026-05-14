@@ -797,7 +797,7 @@ export async function fetchMonthlyPowerFlow(
   siteId: 'parc-du-cap' | 'centurion',
 ): Promise<PowerFlowPoint[]> {
   const cfg = SITE_HIGECO[siteId];
-  if (!cfg.gridPower || !cfg.bess) {
+  if (!cfg.gridPower || !cfg.bess || !cfg.demand) {
     return [];
   }
 
