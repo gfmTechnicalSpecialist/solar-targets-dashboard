@@ -115,14 +115,14 @@ function drawPowerFlowCharts(
   // Drawing order matters: filled areas first, lines on top
   // fill: hex fill color (with alpha applied in code), or null for line-only
   const AREA_SERIES = [
-    { key: 'gridKw'  as const, color: '#ef4444', fill: 'rgba(239,68,68,0.25)',   lbl: 'Grid (kW)'  },
-    { key: 'pvKw'   as const, color: '#16a34a', fill: 'rgba(22,163,74,0.25)',    lbl: 'PV (kW)'   },
+    { key: 'gridKw'  as const, color: '#ef4444', fill: 'rgba(239,68,68,0.25)',    lbl: 'Grid (kW)', glow: false },
+    { key: 'pvKw'   as const, color: '#f97316', fill: 'rgba(249,115,22,0.22)',   lbl: 'PV (kW)',   glow: true  },
   ] as const;
 
   const LINE_SERIES = [
-    { key: 'loadKw'  as const, color: '#111827', lbl: 'Load (kW)',  lineWidth: 2.5, dash: []     },
-    { key: 'bessKw'  as const, color: '#2563eb', lbl: 'BESS (kW)', lineWidth: 2.0, dash: []     },
-    { key: 'gridKva' as const, color: '#dc2626', lbl: 'Grid (kVA)',lineWidth: 2.0, dash: [10, 6] },
+    { key: 'loadKw'  as const, color: '#111827', lbl: 'Load (kW)',  lineWidth: 2.5, dash: [] as number[],      glow: true  },
+    { key: 'bessKw'  as const, color: '#2563eb', lbl: 'BESS (kW)', lineWidth: 2.0, dash: [] as number[],      glow: false },
+    { key: 'gridKva' as const, color: '#dc2626', lbl: 'Grid (kVA)',lineWidth: 3.5, dash: [10, 6] as number[], glow: false },
   ] as const;
 
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
@@ -315,27 +315,72 @@ function drawPowerFlowCharts(
       ctx.closePath();
       ctx.fillStyle = s.fill;
       ctx.fill();
-      // Solid border line on top of fill
-      ctx.beginPath();
-      first = true;
-      for (const p of weekPoints) {
-        const px = toX(p.timestamp);
-        const py = toY(p[s.key]);
-        if (first) { ctx.moveTo(px, py); first = false; }
-        else        ctx.lineTo(px, py);
+      // Border line on top of fill (with optional glow for PV)
+      const drawLine = (pts: PowerFlowPoint[], keyName: 'gridKw' | 'pvKw' | 'loadKw' | 'bessKw' | 'gridKva') => {
+        ctx.beginPath();
+        let f = true;
+        for (const p of pts) {
+          const px = toX(p.timestamp);
+          const py = toY(p[keyName]);
+          if (f) { ctx.moveTo(px, py); f = false; }
+          else    ctx.lineTo(px, py);
+        }
+      };
+
+      if (s.glow) {
+        // outer glow layer
+        ctx.save();
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur  = 18;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth   = 4.0;
+        ctx.lineJoin    = 'round';
+        ctx.globalAlpha = 0.45;
+        drawLine(weekPoints, s.key);
+        ctx.stroke();
+        ctx.restore();
       }
+
+      // Crisp top line
+      drawLine(weekPoints, s.key);
       ctx.strokeStyle = s.color;
-      ctx.lineWidth   = 2.0;
+      ctx.lineWidth   = 2.2;
       ctx.lineJoin    = 'round';
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
       ctx.stroke();
     }
 
     // 2. Solid / dashed lines (Load, BESS, Grid kVA)
     for (const s of LINE_SERIES) {
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth   = s.lineWidth;
-      ctx.lineJoin    = 'round';
+      if (s.glow) {
+        // Glow pass
+        ctx.save();
+        ctx.shadowColor  = s.color;
+        ctx.shadowBlur   = 16;
+        ctx.strokeStyle  = s.color;
+        ctx.lineWidth    = s.lineWidth + 2.5;
+        ctx.lineJoin     = 'round';
+        ctx.globalAlpha  = 0.35;
+        ctx.setLineDash([...s.dash]);
+        ctx.beginPath();
+        let fg = true;
+        for (const p of weekPoints) {
+          const px = toX(p.timestamp);
+          const py = toY(p[s.key]);
+          if (fg) { ctx.moveTo(px, py); fg = false; }
+          else     ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      // Crisp line
+      ctx.strokeStyle  = s.color;
+      ctx.lineWidth    = s.lineWidth;
+      ctx.lineJoin     = 'round';
+      ctx.globalAlpha  = 1;
       ctx.setLineDash([...s.dash]);
       ctx.beginPath();
       let first = true;
