@@ -95,137 +95,207 @@ interface ReportData {
 // Power-flow chart — drawn onto an offscreen canvas, embedded as PNG
 // ---------------------------------------------------------------------------
 
-function drawPowerFlowChart(points: PowerFlowPoint[], label: string): string {
-  const PAD_L = 72, PAD_R = 30, PAD_T = 56, PAD_B = 70;
-  const W = 1800, H = 620;
+function drawPowerFlowChart(
+  points: PowerFlowPoint[],
+  label: string,
+): { dataUrl: string; width: number; height: number } {
+  const SAST_S  = 2 * 3600;
+  const MO_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const SERIES = [
+    { key: 'pvKw'   as const, color: '#059669', lbl: 'PV'   },
+    { key: 'loadKw' as const, color: '#2563eb', lbl: 'Load' },
+    { key: 'bessKw' as const, color: '#d97706', lbl: 'BESS' },
+    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid' },
+  ];
+
+  // ── Group points into calendar weeks (Mon–Sun, SAST) ─────────────────────
+  const weekMap = new Map<string, PowerFlowPoint[]>();
+  for (const p of points) {
+    const d = new Date((p.timestamp + SAST_S) * 1000);
+    const dow = d.getUTCDay();
+    const daysFromMon = (dow + 6) % 7;
+    const mon = new Date(Date.UTC(
+      d.getUTCFullYear(), d.getUTCMonth(),
+      d.getUTCDate() - daysFromMon,
+    ));
+    const key = mon.toISOString().slice(0, 10);
+    let arr = weekMap.get(key);
+    if (!arr) { arr = []; weekMap.set(key, arr); }
+    arr.push(p);
+  }
+  const weeks = [...weekMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const nWeeks = Math.max(weeks.length, 1);
+
+  // ── Canvas layout ─────────────────────────────────────────────────────────
+  const W        = 1800;
+  const PAD_L    = 72;
+  const PAD_R    = 30;
+  const TITLE_H  = 62;   // space for overall title + legend
+  const PANEL_H  = 200;  // inner chart area per week
+  const PAD_T    = 48;   // above each panel (week label)
+  const PAD_B    = 40;   // below each panel (x-axis labels)
+  const GAP      = 24;   // between panels
+  const H = TITLE_H + nWeeks * (PAD_T + PANEL_H + PAD_B) + (nWeeks - 1) * GAP + 20;
+
   const canvas = document.createElement('canvas');
   canvas.width  = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-
   const chartW = W - PAD_L - PAD_R;
-  const chartH = H - PAD_T - PAD_B;
 
-  // Background
-  ctx.fillStyle = '#111827';
+  // ── White background ─────────────────────────────────────────────────────
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
 
-  // Title
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 24px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Power Flow  —  ${label}`, PAD_L, 36);
-
   if (points.length === 0) {
-    ctx.fillStyle = '#9ca3af';
-    ctx.font = '20px sans-serif';
+    ctx.fillStyle = '#374151';
+    ctx.font = '22px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('No power-flow data available', W / 2, H / 2);
-    return canvas.toDataURL('image/png');
+    return { dataUrl: canvas.toDataURL('image/png'), width: W, height: H };
   }
 
-  const minTs  = points[0].timestamp;
-  const maxTs  = points[points.length - 1].timestamp;
-  const tsRange = Math.max(maxTs - minTs, 1);
+  // ── Overall title ─────────────────────────────────────────────────────────
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Power Flow — ${label}`, PAD_L, 38);
 
-  const allVals = points.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw]);
-  const rawMin  = Math.min(...allVals);
-  const rawMax  = Math.max(...allVals);
-  // Round axis bounds to nearest 50 kW for cleaner ticks
-  const yMin = Math.floor(Math.min(rawMin, 0) / 50) * 50;
-  const yMax = Math.ceil(Math.max(rawMax, 50) / 50) * 50;
-  const yRange = yMax - yMin;
-
-  const toX = (ts: number)  => PAD_L + ((ts - minTs) / tsRange) * chartW;
-  const toY = (kw: number)  => PAD_T + chartH - ((kw - yMin) / yRange) * chartH;
-
-  // Horizontal grid lines + Y-axis labels
-  const yTicks = 6;
-  const yStep  = yRange / yTicks;
-  for (let i = 0; i <= yTicks; i++) {
-    const val = yMin + i * yStep;
-    const py  = toY(val);
-    ctx.strokeStyle = val === 0 ? '#4b5563' : '#1f2937';
-    ctx.lineWidth   = val === 0 ? 1.5 : 1;
-    ctx.setLineDash(val === 0 ? [6, 4] : []);
-    ctx.beginPath();
-    ctx.moveTo(PAD_L, py);
-    ctx.lineTo(W - PAD_R, py);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle  = '#9ca3af';
-    ctx.font       = '15px sans-serif';
-    ctx.textAlign  = 'right';
-    ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 5);
-  }
-
-  // Y-axis unit label
-  ctx.save();
-  ctx.fillStyle  = '#6b7280';
-  ctx.font       = '14px sans-serif';
-  ctx.textAlign  = 'center';
-  ctx.translate(18, PAD_T + chartH / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText('kW', 0, 0);
-  ctx.restore();
-
-  // Vertical day separators + X-axis labels
-  const SAST_S = 2 * 3600;
-  const seenDays = new Set<string>();
-  for (const p of points) {
-    const d      = new Date((p.timestamp + SAST_S) * 1000);
-    const dayKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-    if (!seenDays.has(dayKey)) {
-      seenDays.add(dayKey);
-      const px = toX(p.timestamp);
-      ctx.strokeStyle = '#1f2937';
-      ctx.lineWidth   = 0.7;
-      ctx.beginPath();
-      ctx.moveTo(px, PAD_T);
-      ctx.lineTo(px, PAD_T + chartH);
-      ctx.stroke();
-      ctx.fillStyle  = '#9ca3af';
-      ctx.font       = '13px sans-serif';
-      ctx.textAlign  = 'center';
-      ctx.fillText(`${d.getUTCDate()}`, px, PAD_T + chartH + 18);
-    }
-  }
-
-  // Draw series lines
-  const SERIES = [
-    { key: 'pvKw'   as const, color: '#10b981', lbl: 'PV'   },
-    { key: 'loadKw' as const, color: '#3b82f6', lbl: 'Load' },
-    { key: 'bessKw' as const, color: '#f59e0b', lbl: 'BESS' },
-    { key: 'gridKw' as const, color: '#ef4444', lbl: 'Grid' },
-  ];
-
-  for (const s of SERIES) {
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth   = 1.8;
-    ctx.beginPath();
-    let first = true;
-    for (const p of points) {
-      const px = toX(p.timestamp);
-      const py = toY(p[s.key]);
-      if (first) { ctx.moveTo(px, py); first = false; }
-      else        ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-
-  // Legend — bottom-left
-  const LEG_Y = PAD_T + chartH + 40;
+  // Legend (top-right)
   SERIES.forEach((s, i) => {
-    const lx = PAD_L + i * 170;
-    ctx.fillStyle = s.color;
-    ctx.fillRect(lx, LEG_Y - 4, 28, 4);
-    ctx.fillStyle  = '#d1d5db';
-    ctx.font       = '15px sans-serif';
-    ctx.textAlign  = 'left';
-    ctx.fillText(s.lbl, lx + 34, LEG_Y + 1);
+    const lx = W - PAD_R - (SERIES.length - i) * 160;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(lx, 32); ctx.lineTo(lx + 30, 32);
+    ctx.stroke();
+    ctx.fillStyle = '#374151';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(s.lbl, lx + 36, 37);
   });
 
-  return canvas.toDataURL('image/png');
+  // Thin rule under title
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD_L, TITLE_H - 8);
+  ctx.lineTo(W - PAD_R, TITLE_H - 8);
+  ctx.stroke();
+
+  // ── Per-week panels ───────────────────────────────────────────────────────
+  weeks.forEach(([weekKey, weekPoints], wi) => {
+    const panelTop = TITLE_H + wi * (PAD_T + PANEL_H + PAD_B + GAP);
+    const chartTop = panelTop + PAD_T;
+
+    // Week date range label
+    const [wy, wm, wd] = weekKey.split('-').map(Number);
+    const monDate = new Date(Date.UTC(wy, wm - 1, wd));
+    const sunDate = new Date(monDate.getTime() + 6 * 86400000);
+    const weekLabel = `Week ${wi + 1}: ${wd} ${MO_NAMES[wm - 1]} – ${sunDate.getUTCDate()} ${MO_NAMES[sunDate.getUTCMonth()]} ${sunDate.getUTCFullYear()}`;
+
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(weekLabel, PAD_L, panelTop + 28);
+
+    // Panel background + border
+    ctx.fillStyle = '#f9fafb';
+    ctx.fillRect(PAD_L, chartTop, chartW, PANEL_H);
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PAD_L, chartTop, chartW, PANEL_H);
+
+    if (weekPoints.length === 0) {
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('No data', PAD_L + chartW / 2, chartTop + PANEL_H / 2);
+      return;
+    }
+
+    // Y range (rounded to 50 kW)
+    const allVals = weekPoints.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw]);
+    const yMin = Math.floor(Math.min(0, ...allVals) / 50) * 50;
+    const yMax = Math.ceil(Math.max(50, ...allVals) / 50) * 50;
+    const yRange = yMax - yMin;
+
+    const minTs   = weekPoints[0].timestamp;
+    const maxTs   = weekPoints[weekPoints.length - 1].timestamp;
+    const tsRange = Math.max(maxTs - minTs, 1);
+
+    const toX = (ts: number) => PAD_L + ((ts - minTs) / tsRange) * chartW;
+    const toY = (kw: number) => chartTop + PANEL_H - ((kw - yMin) / yRange) * PANEL_H;
+
+    // Horizontal grid lines + Y labels
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+      const val = yMin + (i / yTicks) * yRange;
+      const py  = toY(val);
+      ctx.strokeStyle = val === 0 ? '#9ca3af' : '#e5e7eb';
+      ctx.lineWidth   = val === 0 ? 1.5 : 0.7;
+      ctx.setLineDash(val === 0 ? [6, 4] : []);
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, py); ctx.lineTo(W - PAD_R, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 4);
+    }
+
+    // Y-axis unit
+    ctx.save();
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.translate(16, chartTop + PANEL_H / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('kW', 0, 0);
+    ctx.restore();
+
+    // Vertical day separators + day labels
+    const seenDays = new Set<string>();
+    for (const p of weekPoints) {
+      const d = new Date((p.timestamp + SAST_S) * 1000);
+      const dayKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+      if (!seenDays.has(dayKey)) {
+        seenDays.add(dayKey);
+        const px = toX(p.timestamp);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 0.7;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(px, chartTop); ctx.lineTo(px, chartTop + PANEL_H);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#374151';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()}`, px, chartTop + PANEL_H + 24);
+      }
+    }
+
+    // Series lines
+    for (const s of SERIES) {
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      let first = true;
+      for (const p of weekPoints) {
+        const px = toX(p.timestamp);
+        const py = toY(p[s.key]);
+        if (first) { ctx.moveTo(px, py); first = false; }
+        else        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+  });
+
+  return { dataUrl: canvas.toDataURL('image/png'), width: W, height: H };
 }
 
 function generatePdf(data: ReportData) {
@@ -695,11 +765,15 @@ function generatePdf(data: ReportData) {
     doc.setFontSize(7);
     doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
 
-    // Draw chart image
-    const chartDataUrl = drawPowerFlowChart(data.powerFlow, label);
-    const imgW = contentW;
-    const imgH = Math.round(imgW * (620 / 1800)); // preserve 1800×620 aspect ratio
-    doc.addImage(chartDataUrl, 'PNG', margin, 28, imgW, imgH);
+    // Draw chart image (scale to fit A4 content area)
+    const chart = drawPowerFlowChart(data.powerFlow, label);
+    const naturalImgH = Math.round(contentW * (chart.height / chart.width));
+    const maxImgH = 240; // mm — keeps chart on one page
+    const scale = naturalImgH > maxImgH ? maxImgH / naturalImgH : 1;
+    const imgW = Math.round(contentW * scale);
+    const imgH = Math.round(naturalImgH * scale);
+    const imgX = margin + (contentW - imgW) / 2;
+    doc.addImage(chart.dataUrl, 'PNG', imgX, 28, imgW, imgH);
 
     // Legend note below chart
     const noteY = 28 + imgH + 5;
