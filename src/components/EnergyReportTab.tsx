@@ -113,10 +113,10 @@ function drawPowerFlowCharts(
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   const SERIES = [
-    { key: 'pvKw'   as const, color: '#059669', lbl: 'PV'   },
-    { key: 'loadKw' as const, color: '#2563eb', lbl: 'Load' },
-    { key: 'bessKw' as const, color: '#d97706', lbl: 'BESS' },
-    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid' },
+    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV',   lineWidth: 3.0, dash: []         },
+    { key: 'loadKw' as const, color: '#1d4ed8', lbl: 'Load', lineWidth: 2.5, dash: [12, 6]     },
+    { key: 'bessKw' as const, color: '#b45309', lbl: 'BESS', lineWidth: 2.0, dash: [4, 4]      },
+    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid', lineWidth: 3.5, dash: [18, 6, 4, 6] },
   ];
 
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
@@ -168,17 +168,19 @@ function drawPowerFlowCharts(
 
     // Legend (same row, right-aligned)
     SERIES.forEach((s, i) => {
-      const lx = CW - PAD_R - (SERIES.length - i) * 165;
+      const lx = CW - PAD_R - (SERIES.length - i) * 185;
       ctx.save();
       ctx.strokeStyle = s.color;
-      ctx.lineWidth   = 4;
+      ctx.lineWidth   = s.lineWidth + 1; // slightly bolder in legend
+      ctx.setLineDash(s.dash);
       ctx.beginPath();
-      ctx.moveTo(lx, 22); ctx.lineTo(lx + 30, 22);
+      ctx.moveTo(lx, 22); ctx.lineTo(lx + 40, 22);
       ctx.stroke();
-      ctx.fillStyle  = '#374151';
-      ctx.font       = '18px sans-serif';
+      ctx.setLineDash([]);
+      ctx.fillStyle  = '#111827';
+      ctx.font       = 'bold 17px sans-serif';
       ctx.textAlign  = 'left';
-      ctx.fillText(s.lbl, lx + 36, 27);
+      ctx.fillText(s.lbl, lx + 48, 27);
       ctx.restore();
     });
 
@@ -276,9 +278,9 @@ function drawPowerFlowCharts(
 
     for (const s of SERIES) {
       ctx.strokeStyle = s.color;
-      ctx.lineWidth   = 2.5;
+      ctx.lineWidth   = s.lineWidth;
       ctx.lineJoin    = 'round';
-      ctx.setLineDash([]);
+      ctx.setLineDash(s.dash);
       ctx.beginPath();
       let first = true;
       for (const p of weekPoints) {
@@ -288,6 +290,7 @@ function drawPowerFlowCharts(
         else        ctx.lineTo(px, py);
       }
       ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     ctx.restore();
