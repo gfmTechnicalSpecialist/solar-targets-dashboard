@@ -845,9 +845,21 @@ export async function fetchMonthlyPowerFlow(
     if (!outer?.dati) throw new Error('Unexpected response structure');
 
     const raw: [number, number, string][] = outer.dati;
+
+    // Track both the map value and the original (pre-snap) timestamp so we
+    // can keep whichever reading was closest to the boundary when two raw
+    // timestamps snap to the same 30-min slot (device clock drift).
+    const bestDelta = new Map<number, number>(); // snappedTs → |raw - snapped|
     const map = new Map<number, number>();
+
     for (const [ts, , val] of raw) {
-      map.set(ts, parseFloat(val) || 0);
+      const snapped = Math.round(ts / 1800) * 1800;
+      const delta   = Math.abs(ts - snapped);
+      const prev    = bestDelta.get(snapped);
+      if (prev === undefined || delta < prev) {
+        bestDelta.set(snapped, delta);
+        map.set(snapped, parseFloat(val) || 0);
+      }
     }
     return map;
   };
