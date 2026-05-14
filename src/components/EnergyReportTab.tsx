@@ -8,7 +8,9 @@ import {
   fetchMonthlyLoadEnergyHourly,
   fetchMonthlyPeakDemand,
   fetchDailyProduction,
+  fetchMonthlyPowerFlow,
 } from '../api/higeco';
+import type { PowerFlowPoint } from '../api/higeco';
 import {
   calculateTouCharges,
   calculateDemandCharge,
@@ -85,6 +87,145 @@ interface ReportData {
   demand: DemandBreakdown | null;
   solarGenerationKwh: number;
   targetKwh: number;
+  /** 30-min power-flow data — PDC only */
+  powerFlow: PowerFlowPoint[] | null;
+}
+
+// ---------------------------------------------------------------------------
+// Power-flow chart — drawn onto an offscreen canvas, embedded as PNG
+// ---------------------------------------------------------------------------
+
+function drawPowerFlowChart(points: PowerFlowPoint[], label: string): string {
+  const PAD_L = 72, PAD_R = 30, PAD_T = 56, PAD_B = 70;
+  const W = 1800, H = 620;
+  const canvas = document.createElement('canvas');
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  // Background
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Power Flow  —  ${label}`, PAD_L, 36);
+
+  if (points.length === 0) {
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No power-flow data available', W / 2, H / 2);
+    return canvas.toDataURL('image/png');
+  }
+
+  const minTs  = points[0].timestamp;
+  const maxTs  = points[points.length - 1].timestamp;
+  const tsRange = Math.max(maxTs - minTs, 1);
+
+  const allVals = points.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw]);
+  const rawMin  = Math.min(...allVals);
+  const rawMax  = Math.max(...allVals);
+  // Round axis bounds to nearest 50 kW for cleaner ticks
+  const yMin = Math.floor(Math.min(rawMin, 0) / 50) * 50;
+  const yMax = Math.ceil(Math.max(rawMax, 50) / 50) * 50;
+  const yRange = yMax - yMin;
+
+  const toX = (ts: number)  => PAD_L + ((ts - minTs) / tsRange) * chartW;
+  const toY = (kw: number)  => PAD_T + chartH - ((kw - yMin) / yRange) * chartH;
+
+  // Horizontal grid lines + Y-axis labels
+  const yTicks = 6;
+  const yStep  = yRange / yTicks;
+  for (let i = 0; i <= yTicks; i++) {
+    const val = yMin + i * yStep;
+    const py  = toY(val);
+    ctx.strokeStyle = val === 0 ? '#4b5563' : '#1f2937';
+    ctx.lineWidth   = val === 0 ? 1.5 : 1;
+    ctx.setLineDash(val === 0 ? [6, 4] : []);
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, py);
+    ctx.lineTo(W - PAD_R, py);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle  = '#9ca3af';
+    ctx.font       = '15px sans-serif';
+    ctx.textAlign  = 'right';
+    ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 5);
+  }
+
+  // Y-axis unit label
+  ctx.save();
+  ctx.fillStyle  = '#6b7280';
+  ctx.font       = '14px sans-serif';
+  ctx.textAlign  = 'center';
+  ctx.translate(18, PAD_T + chartH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('kW', 0, 0);
+  ctx.restore();
+
+  // Vertical day separators + X-axis labels
+  const SAST_S = 2 * 3600;
+  const seenDays = new Set<string>();
+  for (const p of points) {
+    const d      = new Date((p.timestamp + SAST_S) * 1000);
+    const dayKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    if (!seenDays.has(dayKey)) {
+      seenDays.add(dayKey);
+      const px = toX(p.timestamp);
+      ctx.strokeStyle = '#1f2937';
+      ctx.lineWidth   = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(px, PAD_T);
+      ctx.lineTo(px, PAD_T + chartH);
+      ctx.stroke();
+      ctx.fillStyle  = '#9ca3af';
+      ctx.font       = '13px sans-serif';
+      ctx.textAlign  = 'center';
+      ctx.fillText(`${d.getUTCDate()}`, px, PAD_T + chartH + 18);
+    }
+  }
+
+  // Draw series lines
+  const SERIES = [
+    { key: 'pvKw'   as const, color: '#10b981', lbl: 'PV'   },
+    { key: 'loadKw' as const, color: '#3b82f6', lbl: 'Load' },
+    { key: 'bessKw' as const, color: '#f59e0b', lbl: 'BESS' },
+    { key: 'gridKw' as const, color: '#ef4444', lbl: 'Grid' },
+  ];
+
+  for (const s of SERIES) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth   = 1.8;
+    ctx.beginPath();
+    let first = true;
+    for (const p of points) {
+      const px = toX(p.timestamp);
+      const py = toY(p[s.key]);
+      if (first) { ctx.moveTo(px, py); first = false; }
+      else        ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  // Legend — bottom-left
+  const LEG_Y = PAD_T + chartH + 40;
+  SERIES.forEach((s, i) => {
+    const lx = PAD_L + i * 170;
+    ctx.fillStyle = s.color;
+    ctx.fillRect(lx, LEG_Y - 4, 28, 4);
+    ctx.fillStyle  = '#d1d5db';
+    ctx.font       = '15px sans-serif';
+    ctx.textAlign  = 'left';
+    ctx.fillText(s.lbl, lx + 34, LEG_Y + 1);
+  });
+
+  return canvas.toDataURL('image/png');
 }
 
 function generatePdf(data: ReportData) {
@@ -539,6 +680,47 @@ function generatePdf(data: ReportData) {
   doc.text('CoCT 2025/26 MV TOU — Low Demand season rates. Charges exclude VAT unless stated.', margin, pageH - 7.5);
   doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 7.5, { align: 'right' });
 
+  // ── PAGE 2: POWER FLOW CHART (PDC only) ─────────────────────────────────
+  if (data.powerFlow && data.powerFlow.length > 0) {
+    doc.addPage();
+
+    // Header bar
+    doc.setFillColor(...DARK);
+    doc.rect(0, 0, pageW, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('POWER FLOW — 30-MIN INTERVALS', pageW - margin, 9, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
+
+    // Draw chart image
+    const chartDataUrl = drawPowerFlowChart(data.powerFlow, label);
+    const imgW = contentW;
+    const imgH = Math.round(imgW * (620 / 1800)); // preserve 1800×620 aspect ratio
+    doc.addImage(chartDataUrl, 'PNG', margin, 28, imgW, imgH);
+
+    // Legend note below chart
+    const noteY = 28 + imgH + 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...GREY);
+    doc.text(
+      'PV = Total PV Active Power  |  Load = Total Load Active Power  |  BESS = Battery (+ discharge / − charge)  |  Grid = Grid Active Power (+ import)',
+      margin, noteY,
+    );
+
+    // Footer
+    doc.setDrawColor(...BORDER);
+    doc.line(margin, 297 - 12, pageW - margin, 297 - 12);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...GREY);
+    doc.text('30-min average power readings. Timestamps in SAST (UTC+2).', margin, 297 - 7.5);
+    doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, 297 - 7.5, { align: 'right' });
+  }
+
   doc.save(`Energy-Report_${data.siteLabel.replace(/\s+/g, '-')}_${month}.pdf`);
 }
 
@@ -578,11 +760,12 @@ const EnergyReportTab: React.FC = () => {
     setLastReport(null);
 
     try {
-      const [hourlyGrid, peakKva, loadPoints, dailyProd] = await Promise.all([
+      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow] = await Promise.all([
         fetchMonthlyGridEnergyHourly(user.token, year, month, site),
         fetchMonthlyPeakDemand(user.token, year, month, site).catch(() => null),
         fetchMonthlyLoadEnergyHourly(user.token, year, month, site).catch(() => null),
         fetchDailyProduction(user.token, daysCount, site, { startDate, endDate }).catch(() => null),
+        fetchMonthlyPowerFlow(user.token, year, month, site).catch(() => null),
       ]);
 
       const included = calculateTouCharges(hourlyGrid);
@@ -601,6 +784,7 @@ const EnergyReportTab: React.FC = () => {
         demand,
         solarGenerationKwh,
         targetKwh,
+        powerFlow: powerFlow && powerFlow.length > 0 ? powerFlow : null,
       };
 
       setLastReport(reportData);
@@ -708,6 +892,7 @@ const EnergyReportTab: React.FC = () => {
             'Monthly service charge',
             'PV/BESS savings by TOU period',
             'Total bill saving & self-supply rate',
+            'Power flow chart — PV, Load, BESS & Grid (30-min)',  // PDC only
           ].map((item) => (
             <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />

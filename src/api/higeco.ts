@@ -28,6 +28,16 @@ interface SiteHigecoConfig {
     idLog: number;
     items: number[];
   };
+  /** Grid Active Power meter (kW, P_SUM) from Grid-Meter-002 */
+  gridPower?: {
+    idLog: number;
+    items: number[];
+  };
+  /** BESS Active Power meter (kW, Total_BESS_Active_Power) from ADA */
+  bess?: {
+    idLog: number;
+    items: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -54,6 +64,14 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     loadEnergy: {
       idLog: 1999098,
       items: [1999098148],
+    },
+    gridPower: {
+      idLog: 2052549,
+      items: [2052549561],
+    },
+    bess: {
+      idLog: 1999098,
+      items: [1999098116],
     },
   },
   centurion: {
@@ -745,4 +763,117 @@ export async function fetchMonthlyPeakDemand(
   }
 
   return Math.round(maxKva * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// Power-flow fetch — 30-min resolution (period=1800)
+// ---------------------------------------------------------------------------
+
+export interface PowerFlowPoint {
+  /** UTC unix timestamp of the 30-min reading */
+  timestamp: number;
+  /** Total PV Active Power (kW) */
+  pvKw: number;
+  /** Total Load Active Power (kW) */
+  loadKw: number;
+  /** Total BESS Active Power (kW) — positive = discharge, negative = charge */
+  bessKw: number;
+  /** Grid Active Power P_SUM (kW) — positive = import */
+  gridKw: number;
+}
+
+/**
+ * Fetch 30-min power-flow data for a full calendar month.
+ * Fetches four signals in parallel and merges them by timestamp.
+ * Only available for sites with 'gridPower' and 'bess' configured (e.g. 'parc-du-cap').
+ * Returns [] for unsupported sites.
+ */
+export async function fetchMonthlyPowerFlow(
+  token: string,
+  year: number,
+  month: number, // 1–12
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<PowerFlowPoint[]> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.gridPower || !cfg.bess) {
+    return [];
+  }
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const fetchSignalMap = async (idLog: number, items: number[]): Promise<Map<number, number>> => {
+    const queryPayload = JSON.stringify([{
+      act: 'getDataLog',
+      idReq: 'graphsCall',
+      sn: cfg.sn,
+      DATI: {
+        idLog,
+        start: startUtc,
+        stop: stopUtc,
+        maxNumRecord: 100000,
+        period: '1800',
+        zeroTimeOffset: 0,
+        items,
+      },
+    }]);
+
+    const body = new URLSearchParams();
+    body.set('query', queryPayload);
+
+    const res = await fetch(EQUIPMENT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Higeco-Token': token,
+      },
+      body: body.toString(),
+    });
+
+    if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+    const json = await res.json();
+
+    if (isSessionExpiredResponse(json)) {
+      notifySessionExpired();
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+
+    const outer = json?.DATI?.[0]?.DATI;
+    if (!outer?.dati) throw new Error('Unexpected response structure');
+
+    const raw: [number, number, string][] = outer.dati;
+    const map = new Map<number, number>();
+    for (const [ts, , val] of raw) {
+      map.set(ts, parseFloat(val) || 0);
+    }
+    return map;
+  };
+
+  const [pvMap, loadMap, bessMap, gridMap] = await Promise.all([
+    fetchSignalMap(cfg.pvTotalIdLog, cfg.pvTotalItems),
+    fetchSignalMap(cfg.loadIdLog,    cfg.loadItems),
+    fetchSignalMap(cfg.bess.idLog,   cfg.bess.items),
+    fetchSignalMap(cfg.gridPower.idLog, cfg.gridPower.items),
+  ]);
+
+  // Merge by timestamp — union of all keys
+  const allTs = new Set<number>([
+    ...pvMap.keys(), ...loadMap.keys(), ...bessMap.keys(), ...gridMap.keys(),
+  ]);
+
+  const points: PowerFlowPoint[] = [];
+  for (const ts of allTs) {
+    points.push({
+      timestamp: ts,
+      pvKw:   pvMap.get(ts)   ?? 0,
+      loadKw: loadMap.get(ts) ?? 0,
+      bessKw: bessMap.get(ts) ?? 0,
+      gridKw: gridMap.get(ts) ?? 0,
+    });
+  }
+  points.sort((a, b) => a.timestamp - b.timestamp);
+  return points;
 }
