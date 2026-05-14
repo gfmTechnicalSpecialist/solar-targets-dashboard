@@ -112,13 +112,18 @@ function drawPowerFlowCharts(
   const MO_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  const SERIES = [
-    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV (kW)',      lineWidth: 2.5, dash: [] },
-    { key: 'loadKw' as const, color: '#2563eb', lbl: 'Load (kW)',    lineWidth: 2.5, dash: [] },
-    { key: 'bessKw' as const, color: '#e97316', lbl: 'BESS (kW)',    lineWidth: 2.5, dash: [] },
-    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid (kW)',    lineWidth: 2.5, dash: [] },
-    { key: 'gridKva' as const, color: '#7c3aed', lbl: 'Grid (kVA)', lineWidth: 2.0, dash: [8, 5] },
-  ];
+  // Drawing order matters: filled areas first, lines on top
+  // fill: hex fill color (with alpha applied in code), or null for line-only
+  const AREA_SERIES = [
+    { key: 'gridKw'  as const, color: '#ef4444', fill: 'rgba(239,68,68,0.25)',   lbl: 'Grid (kW)'  },
+    { key: 'pvKw'   as const, color: '#16a34a', fill: 'rgba(22,163,74,0.25)',    lbl: 'PV (kW)'   },
+  ] as const;
+
+  const LINE_SERIES = [
+    { key: 'loadKw'  as const, color: '#111827', lbl: 'Load (kW)',  lineWidth: 2.5, dash: []     },
+    { key: 'bessKw'  as const, color: '#2563eb', lbl: 'BESS (kW)', lineWidth: 2.0, dash: []     },
+    { key: 'gridKva' as const, color: '#dc2626', lbl: 'Grid (kVA)',lineWidth: 2.0, dash: [10, 6] },
+  ] as const;
 
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
   const weekMap = new Map<string, PowerFlowPoint[]>();
@@ -167,21 +172,37 @@ function drawPowerFlowCharts(
     ctx.textAlign = 'left';
     ctx.fillText(wLabel, PAD_L, 28);
 
-    // Legend (same row, right-aligned)
-    SERIES.forEach((s, i) => {
-      const lx = CW - PAD_R - (SERIES.length - i) * 210;
+    // Legend (right-aligned): filled swatch for area series, line sample for line series
+    const legendItems = [
+      ...AREA_SERIES.map(s  => ({ lbl: s.lbl,  color: s.color,  fill: s.fill,  dash: [] as number[],   lineWidth: 2.5 })),
+      ...LINE_SERIES.map(s  => ({ lbl: s.lbl,  color: s.color,  fill: null,    dash: [...s.dash],       lineWidth: s.lineWidth })),
+      { lbl: 'Grid Max (kVA)', color: '#dc2626', fill: null, dash: [10, 6] as number[], lineWidth: 2.0 },
+    ];
+    const LEG_ITEM_W = 195;
+    legendItems.forEach((s, i) => {
+      const lx = CW - PAD_R - (legendItems.length - i) * LEG_ITEM_W;
       ctx.save();
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth   = s.lineWidth + 1; // slightly bolder in legend
-      ctx.setLineDash(s.dash);
-      ctx.beginPath();
-      ctx.moveTo(lx, 22); ctx.lineTo(lx + 40, 22);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle  = '#111827';
-      ctx.font       = 'bold 17px sans-serif';
-      ctx.textAlign  = 'left';
-      ctx.fillText(s.lbl, lx + 48, 27);
+      if (s.fill) {
+        // Filled rectangle swatch
+        ctx.fillStyle = s.fill;
+        ctx.fillRect(lx, 14, 36, 14);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(lx, 14, 36, 14);
+      } else {
+        // Line swatch
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth   = s.lineWidth + 0.5;
+        ctx.setLineDash(s.dash);
+        ctx.beginPath();
+        ctx.moveTo(lx, 22); ctx.lineTo(lx + 36, 22);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = '#111827';
+      ctx.font      = 'bold 16px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(s.lbl, lx + 42, 27);
       ctx.restore();
     });
 
@@ -201,8 +222,8 @@ function drawPowerFlowCharts(
       return;
     }
 
-    // Y range — round to nearest 50 kW
-    const allVals = weekPoints.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw]);
+    // Y range — include kVA values so the axis fits all series
+    const allVals = weekPoints.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw, p.gridKva]);
     const yMin = Math.floor(Math.min(0, ...allVals) / 50) * 50;
     const yMax = Math.ceil (Math.max(50, ...allVals) / 50) * 50;
     const yRange = yMax - yMin;
@@ -271,17 +292,51 @@ function drawPowerFlowCharts(
       }
     }
 
-    // Series lines — clip to panel bounds
+    // Series — clip to panel bounds
     ctx.save();
     ctx.beginPath();
     ctx.rect(PAD_L, chartTop, chartW, PANEL_H);
     ctx.clip();
 
-    for (const s of SERIES) {
+    // 1. Filled areas (Grid kW, then PV kW on top)
+    for (const s of AREA_SERIES) {
+      const zero = toY(0);
+      ctx.beginPath();
+      let first = true;
+      for (const p of weekPoints) {
+        const px = toX(p.timestamp);
+        const py = toY(p[s.key]);
+        if (first) { ctx.moveTo(px, zero); ctx.lineTo(px, py); first = false; }
+        else        ctx.lineTo(px, py);
+      }
+      // Close back along the zero baseline
+      const lastP = weekPoints[weekPoints.length - 1];
+      ctx.lineTo(toX(lastP.timestamp), zero);
+      ctx.closePath();
+      ctx.fillStyle = s.fill;
+      ctx.fill();
+      // Solid border line on top of fill
+      ctx.beginPath();
+      first = true;
+      for (const p of weekPoints) {
+        const px = toX(p.timestamp);
+        const py = toY(p[s.key]);
+        if (first) { ctx.moveTo(px, py); first = false; }
+        else        ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth   = 2.0;
+      ctx.lineJoin    = 'round';
+      ctx.setLineDash([]);
+      ctx.stroke();
+    }
+
+    // 2. Solid / dashed lines (Load, BESS, Grid kVA)
+    for (const s of LINE_SERIES) {
       ctx.strokeStyle = s.color;
       ctx.lineWidth   = s.lineWidth;
       ctx.lineJoin    = 'round';
-      ctx.setLineDash(s.dash);
+      ctx.setLineDash([...s.dash]);
       ctx.beginPath();
       let first = true;
       for (const p of weekPoints) {
@@ -292,6 +347,23 @@ function drawPowerFlowCharts(
       }
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // 3. Horizontal Grid Max (kVA) reference line
+    const peakKva = Math.max(...weekPoints.map(p => p.gridKva));
+    if (peakKva > 0) {
+      const py = toY(peakKva);
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth   = 2.5;
+      ctx.setLineDash([10, 6]);
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, py); ctx.lineTo(CW - PAD_R, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle  = '#dc2626';
+      ctx.font       = 'bold 14px sans-serif';
+      ctx.textAlign  = 'left';
+      ctx.fillText(`Grid Max ${Math.round(peakKva)} kVA`, PAD_L + 8, py - 6);
     }
 
     ctx.restore();
