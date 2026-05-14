@@ -176,7 +176,6 @@ function drawPowerFlowCharts(
     const legendItems = [
       ...AREA_SERIES.map(s  => ({ lbl: s.lbl,  color: s.color,  fill: s.fill,  dash: [] as number[],   lineWidth: 2.5 })),
       ...LINE_SERIES.map(s  => ({ lbl: s.lbl,  color: s.color,  fill: null,    dash: [...s.dash],       lineWidth: s.lineWidth })),
-      { lbl: 'Grid Max (kVA)', color: '#dc2626', fill: null, dash: [10, 6] as number[], lineWidth: 2.0 },
     ];
     const LEG_ITEM_W = 195;
     legendItems.forEach((s, i) => {
@@ -392,23 +391,6 @@ function drawPowerFlowCharts(
       }
       ctx.stroke();
       ctx.setLineDash([]);
-    }
-
-    // 3. Horizontal Grid Max (kVA) reference line
-    const peakKva = Math.max(...weekPoints.map(p => p.gridKva));
-    if (peakKva > 0) {
-      const py = toY(peakKva);
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth   = 2.5;
-      ctx.setLineDash([10, 6]);
-      ctx.beginPath();
-      ctx.moveTo(PAD_L, py); ctx.lineTo(CW - PAD_R, py);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle  = '#dc2626';
-      ctx.font       = 'bold 14px sans-serif';
-      ctx.textAlign  = 'left';
-      ctx.fillText(`Grid Max ${Math.round(peakKva)} kVA`, PAD_L + 8, py - 6);
     }
 
     ctx.restore();
