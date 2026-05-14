@@ -780,6 +780,8 @@ export interface PowerFlowPoint {
   bessKw: number;
   /** Grid Active Power P_SUM (kW) — positive = import */
   gridKw: number;
+  /** Grid Apparent Power S_SUM (kVA) */
+  gridKva: number;
 }
 
 /**
@@ -864,26 +866,28 @@ export async function fetchMonthlyPowerFlow(
     return map;
   };
 
-  const [pvMap, loadMap, bessMap, gridMap] = await Promise.all([
-    fetchSignalMap(cfg.pvTotalIdLog, cfg.pvTotalItems),
-    fetchSignalMap(cfg.loadIdLog,    cfg.loadItems),
-    fetchSignalMap(cfg.bess.idLog,   cfg.bess.items),
+  const [pvMap, loadMap, bessMap, gridMap, kvaMap] = await Promise.all([
+    fetchSignalMap(cfg.pvTotalIdLog,    cfg.pvTotalItems),
+    fetchSignalMap(cfg.loadIdLog,       cfg.loadItems),
+    fetchSignalMap(cfg.bess.idLog,      cfg.bess.items),
     fetchSignalMap(cfg.gridPower.idLog, cfg.gridPower.items),
+    fetchSignalMap(cfg.demand.idLog,    cfg.demand.items),
   ]);
 
   // Merge by timestamp — union of all keys
   const allTs = new Set<number>([
-    ...pvMap.keys(), ...loadMap.keys(), ...bessMap.keys(), ...gridMap.keys(),
+    ...pvMap.keys(), ...loadMap.keys(), ...bessMap.keys(), ...gridMap.keys(), ...kvaMap.keys(),
   ]);
 
   const points: PowerFlowPoint[] = [];
   for (const ts of allTs) {
     points.push({
       timestamp: ts,
-      pvKw:   pvMap.get(ts)   ?? 0,
-      loadKw: loadMap.get(ts) ?? 0,
-      bessKw: bessMap.get(ts) ?? 0,
-      gridKw: gridMap.get(ts) ?? 0,
+      pvKw:    pvMap.get(ts)   ?? 0,
+      loadKw:  loadMap.get(ts) ?? 0,
+      bessKw:  bessMap.get(ts) ?? 0,
+      gridKw:  gridMap.get(ts) ?? 0,
+      gridKva: kvaMap.get(ts)  ?? 0,
     });
   }
   points.sort((a, b) => a.timestamp - b.timestamp);

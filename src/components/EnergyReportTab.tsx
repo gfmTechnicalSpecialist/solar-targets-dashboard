@@ -113,10 +113,11 @@ function drawPowerFlowCharts(
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   const SERIES = [
-    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV',   lineWidth: 3.0, dash: []         },
-    { key: 'loadKw' as const, color: '#1d4ed8', lbl: 'Load', lineWidth: 2.5, dash: [12, 6]     },
-    { key: 'bessKw' as const, color: '#b45309', lbl: 'BESS', lineWidth: 2.0, dash: [4, 4]      },
-    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid', lineWidth: 3.5, dash: [18, 6, 4, 6] },
+    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV',             lineWidth: 3.0, dash: []            },
+    { key: 'loadKw' as const, color: '#1d4ed8', lbl: 'Load (kW)',      lineWidth: 2.5, dash: [12, 6]        },
+    { key: 'bessKw' as const, color: '#b45309', lbl: 'BESS',           lineWidth: 2.0, dash: [4, 4]         },
+    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid (kW)',      lineWidth: 3.5, dash: [18, 6, 4, 6]  },
+    { key: 'gridKva' as const, color: '#7c3aed', lbl: 'Grid (kVA)',    lineWidth: 2.0, dash: [2, 5]         },
   ];
 
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
@@ -168,7 +169,7 @@ function drawPowerFlowCharts(
 
     // Legend (same row, right-aligned)
     SERIES.forEach((s, i) => {
-      const lx = CW - PAD_R - (SERIES.length - i) * 185;
+      const lx = CW - PAD_R - (SERIES.length - i) * 210;
       ctx.save();
       ctx.strokeStyle = s.color;
       ctx.lineWidth   = s.lineWidth + 1; // slightly bolder in legend
@@ -784,7 +785,7 @@ function generatePdf(data: ReportData) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6);
         doc.setTextColor(...GREY);
-        doc.text('30-min avg power (kW). Clip shows values within week range. SAST (UTC+2).', margin, 297 - 7.5);
+        doc.text('30-min avg power. PV/Load/BESS/Grid in kW. Grid (kVA) = apparent power S_SUM. SAST (UTC+2).', margin, 297 - 7.5);
         doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, 297 - 7.5, { align: 'right' });
       }
 
