@@ -113,11 +113,11 @@ function drawPowerFlowCharts(
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   const SERIES = [
-    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV',             lineWidth: 3.0, dash: []            },
-    { key: 'loadKw' as const, color: '#1d4ed8', lbl: 'Load (kW)',      lineWidth: 2.5, dash: [12, 6]        },
-    { key: 'bessKw' as const, color: '#b45309', lbl: 'BESS',           lineWidth: 2.0, dash: [4, 4]         },
-    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid (kW)',      lineWidth: 3.5, dash: [18, 6, 4, 6]  },
-    { key: 'gridKva' as const, color: '#7c3aed', lbl: 'Grid (kVA)',    lineWidth: 2.0, dash: [2, 5]         },
+    { key: 'pvKw'   as const, color: '#16a34a', lbl: 'PV (kW)',      lineWidth: 2.5, dash: [] },
+    { key: 'loadKw' as const, color: '#2563eb', lbl: 'Load (kW)',    lineWidth: 2.5, dash: [] },
+    { key: 'bessKw' as const, color: '#e97316', lbl: 'BESS (kW)',    lineWidth: 2.5, dash: [] },
+    { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid (kW)',    lineWidth: 2.5, dash: [] },
+    { key: 'gridKva' as const, color: '#7c3aed', lbl: 'Grid (kVA)', lineWidth: 2.0, dash: [8, 5] },
   ];
 
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
