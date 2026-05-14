@@ -95,11 +95,20 @@ interface ReportData {
 // Power-flow chart — drawn onto an offscreen canvas, embedded as PNG
 // ---------------------------------------------------------------------------
 
-function drawPowerFlowChart(
+interface WeekChartResult {
+  dataUrl: string;
+  weekLabel: string;
+  /** canvas pixel width (always 1800) */
+  width: number;
+  /** canvas pixel height */
+  height: number;
+}
+
+function drawPowerFlowCharts(
   points: PowerFlowPoint[],
-  label: string,
-): { dataUrl: string; width: number; height: number } {
-  const SAST_S  = 2 * 3600;
+  monthLabel: string,
+): WeekChartResult[] {
+  const SAST_S   = 2 * 3600;
   const MO_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -110,116 +119,89 @@ function drawPowerFlowChart(
     { key: 'gridKw' as const, color: '#dc2626', lbl: 'Grid' },
   ];
 
-  // ── Group points into calendar weeks (Mon–Sun, SAST) ─────────────────────
+  // ── Group by Mon-start week (SAST) ───────────────────────────────────────
   const weekMap = new Map<string, PowerFlowPoint[]>();
   for (const p of points) {
-    const d = new Date((p.timestamp + SAST_S) * 1000);
+    const d   = new Date((p.timestamp + SAST_S) * 1000);
     const dow = d.getUTCDay();
-    const daysFromMon = (dow + 6) % 7;
-    const mon = new Date(Date.UTC(
-      d.getUTCFullYear(), d.getUTCMonth(),
-      d.getUTCDate() - daysFromMon,
-    ));
+    const mon = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - (dow + 6) % 7));
     const key = mon.toISOString().slice(0, 10);
     let arr = weekMap.get(key);
     if (!arr) { arr = []; weekMap.set(key, arr); }
     arr.push(p);
   }
   const weeks = [...weekMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const nWeeks = Math.max(weeks.length, 1);
 
-  // ── Canvas layout ─────────────────────────────────────────────────────────
-  const W        = 1800;
-  const PAD_L    = 72;
+  // ── Per-week canvas constants ─────────────────────────────────────────────
+  const CW       = 1800;
+  const PAD_L    = 80;
   const PAD_R    = 30;
-  const TITLE_H  = 62;   // space for overall title + legend
-  const PANEL_H  = 200;  // inner chart area per week
-  const PAD_T    = 48;   // above each panel (week label)
-  const PAD_B    = 40;   // below each panel (x-axis labels)
-  const GAP      = 24;   // between panels
-  const H = TITLE_H + nWeeks * (PAD_T + PANEL_H + PAD_B) + (nWeeks - 1) * GAP + 20;
+  const HEADER_H = 70;   // week label + legend
+  const PANEL_H  = 420;  // chart area — tall for visible lines
+  const XAXIS_H  = 52;   // day labels
+  const CH       = HEADER_H + PANEL_H + XAXIS_H;
+  const chartW   = CW - PAD_L - PAD_R;
+  const chartTop = HEADER_H;
 
-  const canvas = document.createElement('canvas');
-  canvas.width  = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-  const chartW = W - PAD_L - PAD_R;
+  const results: WeekChartResult[] = [];
 
-  // ── White background ─────────────────────────────────────────────────────
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
-
-  if (points.length === 0) {
-    ctx.fillStyle = '#374151';
-    ctx.font = '22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No power-flow data available', W / 2, H / 2);
-    return { dataUrl: canvas.toDataURL('image/png'), width: W, height: H };
-  }
-
-  // ── Overall title ─────────────────────────────────────────────────────────
-  ctx.fillStyle = '#111827';
-  ctx.font = 'bold 28px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Power Flow — ${label}`, PAD_L, 38);
-
-  // Legend (top-right)
-  SERIES.forEach((s, i) => {
-    const lx = W - PAD_R - (SERIES.length - i) * 160;
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(lx, 32); ctx.lineTo(lx + 30, 32);
-    ctx.stroke();
-    ctx.fillStyle = '#374151';
-    ctx.font = '16px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(s.lbl, lx + 36, 37);
-  });
-
-  // Thin rule under title
-  ctx.strokeStyle = '#e5e7eb';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(PAD_L, TITLE_H - 8);
-  ctx.lineTo(W - PAD_R, TITLE_H - 8);
-  ctx.stroke();
-
-  // ── Per-week panels ───────────────────────────────────────────────────────
   weeks.forEach(([weekKey, weekPoints], wi) => {
-    const panelTop = TITLE_H + wi * (PAD_T + PANEL_H + PAD_B + GAP);
-    const chartTop = panelTop + PAD_T;
-
-    // Week date range label
     const [wy, wm, wd] = weekKey.split('-').map(Number);
     const monDate = new Date(Date.UTC(wy, wm - 1, wd));
     const sunDate = new Date(monDate.getTime() + 6 * 86400000);
-    const weekLabel = `Week ${wi + 1}: ${wd} ${MO_NAMES[wm - 1]} – ${sunDate.getUTCDate()} ${MO_NAMES[sunDate.getUTCMonth()]} ${sunDate.getUTCFullYear()}`;
+    const wLabel  = `Week ${wi + 1}  |  ${wd} ${MO_NAMES[wm - 1]} – ${sunDate.getUTCDate()} ${MO_NAMES[sunDate.getUTCMonth()]} ${sunDate.getUTCFullYear()}  (${monthLabel})`;
 
+    const canvas = document.createElement('canvas');
+    canvas.width  = CW;
+    canvas.height = CH;
+    const ctx = canvas.getContext('2d')!;
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, CW, CH);
+
+    // Week label
     ctx.fillStyle = '#111827';
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = 'bold 22px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(weekLabel, PAD_L, panelTop + 28);
+    ctx.fillText(wLabel, PAD_L, 28);
 
-    // Panel background + border
-    ctx.fillStyle = '#f9fafb';
-    ctx.fillRect(PAD_L, chartTop, chartW, PANEL_H);
-    ctx.strokeStyle = '#d1d5db';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(PAD_L, chartTop, chartW, PANEL_H);
+    // Legend (same row, right-aligned)
+    SERIES.forEach((s, i) => {
+      const lx = CW - PAD_R - (SERIES.length - i) * 165;
+      ctx.save();
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth   = 4;
+      ctx.beginPath();
+      ctx.moveTo(lx, 22); ctx.lineTo(lx + 30, 22);
+      ctx.stroke();
+      ctx.fillStyle  = '#374151';
+      ctx.font       = '18px sans-serif';
+      ctx.textAlign  = 'left';
+      ctx.fillText(s.lbl, lx + 36, 27);
+      ctx.restore();
+    });
+
+    // Divider line under header
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, HEADER_H - 8); ctx.lineTo(CW - PAD_R, HEADER_H - 8);
+    ctx.stroke();
 
     if (weekPoints.length === 0) {
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('No data', PAD_L + chartW / 2, chartTop + PANEL_H / 2);
+      ctx.fillStyle  = '#9ca3af';
+      ctx.font       = '20px sans-serif';
+      ctx.textAlign  = 'center';
+      ctx.fillText('No data for this week', PAD_L + chartW / 2, chartTop + PANEL_H / 2);
+      results.push({ dataUrl: canvas.toDataURL('image/png'), weekLabel: wLabel, width: CW, height: CH });
       return;
     }
 
-    // Y range (rounded to 50 kW)
+    // Y range — round to nearest 50 kW
     const allVals = weekPoints.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw]);
     const yMin = Math.floor(Math.min(0, ...allVals) / 50) * 50;
-    const yMax = Math.ceil(Math.max(50, ...allVals) / 50) * 50;
+    const yMax = Math.ceil (Math.max(50, ...allVals) / 50) * 50;
     const yRange = yMax - yMin;
 
     const minTs   = weekPoints[0].timestamp;
@@ -229,30 +211,37 @@ function drawPowerFlowChart(
     const toX = (ts: number) => PAD_L + ((ts - minTs) / tsRange) * chartW;
     const toY = (kw: number) => chartTop + PANEL_H - ((kw - yMin) / yRange) * PANEL_H;
 
-    // Horizontal grid lines + Y labels
-    const yTicks = 4;
+    // Panel background + border
+    ctx.fillStyle   = '#f9fafb';
+    ctx.fillRect(PAD_L, chartTop, chartW, PANEL_H);
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(PAD_L, chartTop, chartW, PANEL_H);
+
+    // Horizontal grid lines + Y axis labels
+    const yTicks = 6;
     for (let i = 0; i <= yTicks; i++) {
       const val = yMin + (i / yTicks) * yRange;
       const py  = toY(val);
       ctx.strokeStyle = val === 0 ? '#9ca3af' : '#e5e7eb';
-      ctx.lineWidth   = val === 0 ? 1.5 : 0.7;
-      ctx.setLineDash(val === 0 ? [6, 4] : []);
+      ctx.lineWidth   = val === 0 ? 1.5 : 0.8;
+      ctx.setLineDash(val === 0 ? [8, 5] : []);
       ctx.beginPath();
-      ctx.moveTo(PAD_L, py); ctx.lineTo(W - PAD_R, py);
+      ctx.moveTo(PAD_L, py); ctx.lineTo(CW - PAD_R, py);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '13px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 4);
+      ctx.fillStyle  = '#6b7280';
+      ctx.font       = '18px sans-serif';
+      ctx.textAlign  = 'right';
+      ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 6);
     }
 
-    // Y-axis unit
+    // Y-axis unit label
     ctx.save();
-    ctx.fillStyle = '#9ca3af';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.translate(16, chartTop + PANEL_H / 2);
+    ctx.fillStyle  = '#9ca3af';
+    ctx.font       = '16px sans-serif';
+    ctx.textAlign  = 'center';
+    ctx.translate(20, chartTop + PANEL_H / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('kW', 0, 0);
     ctx.restore();
@@ -260,29 +249,36 @@ function drawPowerFlowChart(
     // Vertical day separators + day labels
     const seenDays = new Set<string>();
     for (const p of weekPoints) {
-      const d = new Date((p.timestamp + SAST_S) * 1000);
+      const d      = new Date((p.timestamp + SAST_S) * 1000);
       const dayKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       if (!seenDays.has(dayKey)) {
         seenDays.add(dayKey);
         const px = toX(p.timestamp);
         ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 0.7;
-        ctx.setLineDash([4, 3]);
+        ctx.lineWidth   = 0.8;
+        ctx.setLineDash([5, 4]);
         ctx.beginPath();
         ctx.moveTo(px, chartTop); ctx.lineTo(px, chartTop + PANEL_H);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = '#374151';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()}`, px, chartTop + PANEL_H + 24);
+        ctx.fillStyle  = '#374151';
+        ctx.font       = '17px sans-serif';
+        ctx.textAlign  = 'center';
+        ctx.fillText(`${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()}`, px, chartTop + PANEL_H + 34);
       }
     }
 
-    // Series lines
+    // Series lines — clip to panel bounds
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD_L, chartTop, chartW, PANEL_H);
+    ctx.clip();
+
     for (const s of SERIES) {
       ctx.strokeStyle = s.color;
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth   = 2.5;
+      ctx.lineJoin    = 'round';
+      ctx.setLineDash([]);
       ctx.beginPath();
       let first = true;
       for (const p of weekPoints) {
@@ -293,9 +289,13 @@ function drawPowerFlowChart(
       }
       ctx.stroke();
     }
+
+    ctx.restore();
+
+    results.push({ dataUrl: canvas.toDataURL('image/png'), weekLabel: wLabel, width: CW, height: CH });
   });
 
-  return { dataUrl: canvas.toDataURL('image/png'), width: W, height: H };
+  return results;
 }
 
 function generatePdf(data: ReportData) {
@@ -750,49 +750,47 @@ function generatePdf(data: ReportData) {
   doc.text('CoCT 2025/26 MV TOU — Low Demand season rates. Charges exclude VAT unless stated.', margin, pageH - 7.5);
   doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 7.5, { align: 'right' });
 
-  // ── PAGE 2: POWER FLOW CHART (PDC only) ─────────────────────────────────
+  // ── POWER FLOW PAGES (PDC only) ──────────────────────────────────────────
   if (data.powerFlow && data.powerFlow.length > 0) {
-    doc.addPage();
+    const weekCharts = drawPowerFlowCharts(data.powerFlow, label);
 
-    // Header bar
-    doc.setFillColor(...DARK);
-    doc.rect(0, 0, pageW, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('POWER FLOW — 30-MIN INTERVALS', pageW - margin, 9, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
+    // Each week chart: 1800×542 canvas → on A4 contentW=182mm → imgH≈54.8mm
+    // We can fit 3 week charts per page comfortably.
+    const imgW = contentW;
+    const CHARTS_PER_PAGE = 3;
+    const GAP_MM = 5;
 
-    // Draw chart image (scale to fit A4 content area)
-    const chart = drawPowerFlowChart(data.powerFlow, label);
-    const naturalImgH = Math.round(contentW * (chart.height / chart.width));
-    const maxImgH = 240; // mm — keeps chart on one page
-    const scale = naturalImgH > maxImgH ? maxImgH / naturalImgH : 1;
-    const imgW = Math.round(contentW * scale);
-    const imgH = Math.round(naturalImgH * scale);
-    const imgX = margin + (contentW - imgW) / 2;
-    doc.addImage(chart.dataUrl, 'PNG', imgX, 28, imgW, imgH);
+    for (let i = 0; i < weekCharts.length; i++) {
+      if (i % CHARTS_PER_PAGE === 0) {
+        doc.addPage();
 
-    // Legend note below chart
-    const noteY = 28 + imgH + 5;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(...GREY);
-    doc.text(
-      'PV = Total PV Active Power  |  Load = Total Load Active Power  |  BESS = Battery (+ discharge / − charge)  |  Grid = Grid Active Power (+ import)',
-      margin, noteY,
-    );
+        // Header bar
+        doc.setFillColor(...DARK);
+        doc.rect(0, 0, pageW, 22, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('POWER FLOW — 30-MIN INTERVALS', pageW - margin, 9, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
 
-    // Footer
-    doc.setDrawColor(...BORDER);
-    doc.line(margin, 297 - 12, pageW - margin, 297 - 12);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(...GREY);
-    doc.text('30-min average power readings. Timestamps in SAST (UTC+2).', margin, 297 - 7.5);
-    doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, 297 - 7.5, { align: 'right' });
+        // Footer
+        doc.setDrawColor(...BORDER);
+        doc.line(margin, 297 - 12, pageW - margin, 297 - 12);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6);
+        doc.setTextColor(...GREY);
+        doc.text('30-min avg power (kW). Clip shows values within week range. SAST (UTC+2).', margin, 297 - 7.5);
+        doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, 297 - 7.5, { align: 'right' });
+      }
+
+      const chart   = weekCharts[i];
+      const imgH    = Math.round(imgW * (chart.height / chart.width));
+      const slotIdx = i % CHARTS_PER_PAGE;
+      const imgY    = 26 + slotIdx * (imgH + GAP_MM);
+      doc.addImage(chart.dataUrl, 'PNG', margin, imgY, imgW, imgH);
+    }
   }
 
   doc.save(`Energy-Report_${data.siteLabel.replace(/\s+/g, '-')}_${month}.pdf`);
