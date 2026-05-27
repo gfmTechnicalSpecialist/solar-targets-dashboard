@@ -848,17 +848,6 @@ function generatePdf(data: ReportData) {
     y += 18;
   }
 
-    doc.text(fmtR(totalSavings), margin + 4, y + 11.5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...GREY);
-    doc.text(`${savingsPct!.toFixed(1)}% reduction vs grid-only`, pageW - margin - 4, y + 5.5, { align: 'right' });
-    doc.setFontSize(6.5);
-    doc.text(`Self-supply: ${selfSupplyPct.toFixed(1)}%  (${fmtKwh(selfSupplyKwh)} kWh of ${fmtKwh(totalLoad)} kWh total load)`, pageW - margin - 4, y + 11, { align: 'right' });
-    y += 18;
-  }
-
   // ── SECTION: PV & BESS Summary ────────────────────────────────────────────
   const hasPvBess = data.solarGenerationKwh > 0 || data.bessEnergyByPeriod != null || data.measuredGhiWhM2 != null;
   if (hasPvBess) {
