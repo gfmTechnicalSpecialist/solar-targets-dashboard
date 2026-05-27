@@ -155,6 +155,60 @@ export function calculateTouCharges(
   };
 }
 
+export interface BessTouSavings {
+  /** BESS discharge energy by TOU period (kWh) */
+  peakKwh: number;
+  standardKwh: number;
+  offpeakKwh: number;
+  totalKwh: number;
+  /** Cost savings — what would have been paid if grid supplied this instead (R, excl. VAT) */
+  peakSavings: number;
+  standardSavings: number;
+  offpeakSavings: number;
+  totalSavings: number;
+}
+
+/**
+ * Calculate BESS energy savings by TOU period from 30-min power-flow points.
+ * When bessKw > 0 the BESS is discharging; that energy displaced grid imports.
+ * Savings = discharge_kWh × applicable TOU rate.
+ *
+ * @param points    Array of objects exposing timestamp (SAST-expressed-as-UTC) and bessKw.
+ * @param intervalH Width of each sample interval in hours (default 0.5 for 30-min data).
+ * @param rates     TOU energy rates to apply (default: DEFAULT_TOU_RATES).
+ */
+export function calculateBessTouSavings(
+  points: Array<{ timestamp: number; bessKw: number }>,
+  intervalH = 0.5,
+  rates: TouRates = DEFAULT_TOU_RATES,
+): BessTouSavings {
+  const SAST_OFFSET_MS = 2 * 3600 * 1000;
+  let peakKwh = 0;
+  let standardKwh = 0;
+  let offpeakKwh = 0;
+
+  for (const p of points) {
+    if (p.bessKw <= 0) continue;
+    const kwh = p.bessKw * intervalH;
+    const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
+    const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
+    if (period === 'peak')          peakKwh    += kwh;
+    else if (period === 'standard') standardKwh += kwh;
+    else                            offpeakKwh  += kwh;
+  }
+
+  return {
+    peakKwh:         r2(peakKwh),
+    standardKwh:     r2(standardKwh),
+    offpeakKwh:      r2(offpeakKwh),
+    totalKwh:        r2(peakKwh + standardKwh + offpeakKwh),
+    peakSavings:     r2(peakKwh     * rates.peak),
+    standardSavings: r2(standardKwh * rates.standard),
+    offpeakSavings:  r2(offpeakKwh  * rates.offpeak),
+    totalSavings:    r2(peakKwh * rates.peak + standardKwh * rates.standard + offpeakKwh * rates.offpeak),
+  };
+}
+
 /**
  * Convert cumulative meter readings (as returned by the API, period=3600)
  * into per-hour delta kWh values.

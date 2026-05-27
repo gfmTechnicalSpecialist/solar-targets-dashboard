@@ -766,6 +766,79 @@ export async function fetchMonthlyPeakDemand(
 }
 
 // ---------------------------------------------------------------------------
+// Monthly irradiance fetch
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch total measured Global Horizontal Irradiance (GHI) for a calendar month.
+ * Uses the 30-min weather logger (W/m² instantaneous). Each reading is multiplied
+ * by 0.5 h to convert to Wh/m². Returns null for sites without a weather sensor.
+ */
+export async function fetchMonthlyIrradiance(
+  token: string,
+  year: number,
+  month: number,
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<number | null> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.weather) return null;
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const queryPayload = JSON.stringify([{
+    act: 'getDataLog',
+    idReq: 'graphsCall',
+    sn: cfg.sn,
+    DATI: {
+      idLog: cfg.weather.idLog,
+      start: startUtc,
+      stop: stopUtc,
+      maxNumRecord: 100000,
+      period: '1800',
+      zeroTimeOffset: 0,
+      items: cfg.weather.items,
+    },
+  }]);
+
+  const body = new URLSearchParams();
+  body.set('query', queryPayload);
+
+  const res = await fetch(EQUIPMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Higeco-Token': token,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+  const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  const outer = json?.DATI?.[0]?.DATI;
+  if (!outer?.dati) return null;
+
+  const raw: [number, number, string][] = outer.dati;
+
+  // Sum: each reading is W/m², 30-min interval = 0.5 h → Wh/m²
+  let totalWhM2 = 0;
+  for (const [, , val] of raw) {
+    const w = parseFloat(val) || 0;
+    if (w > 0) totalWhM2 += w * 0.5;
+  }
+  return Math.round(totalWhM2);
+}
+
+// ---------------------------------------------------------------------------
 // Power-flow fetch — 30-min resolution (period=1800)
 // ---------------------------------------------------------------------------
 

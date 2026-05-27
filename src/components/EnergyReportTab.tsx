@@ -9,17 +9,19 @@ import {
   fetchMonthlyPeakDemand,
   fetchDailyProduction,
   fetchMonthlyPowerFlow,
+  fetchMonthlyIrradiance,
 } from '../api/higeco';
 import type { PowerFlowPoint } from '../api/higeco';
 import {
   calculateTouCharges,
   calculateDemandCharge,
+  calculateBessTouSavings,
   DEFAULT_TOU_RATES,
   DEFAULT_DEMAND_RATE_PER_KVA,
   SERVICE_CHARGE_EXCL_VAT,
   SERVICE_CHARGE_INCL_VAT,
 } from '../api/tou';
-import type { TouBreakdown, DemandBreakdown } from '../api/tou';
+import type { TouBreakdown, DemandBreakdown, BessTouSavings } from '../api/tou';
 import targets from '../data/targets.json';
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,10 @@ interface ReportData {
   targetKwh: number;
   /** 30-min power-flow data — PDC only */
   powerFlow: PowerFlowPoint[] | null;
+  /** BESS discharge savings by TOU period — derived from powerFlow */
+  bessEnergyByPeriod: BessTouSavings | null;
+  /** Total measured GHI for the month (Wh/m²) — weather sensor */
+  measuredGhiWhM2: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -842,6 +848,100 @@ function generatePdf(data: ReportData) {
     y += 18;
   }
 
+    doc.text(fmtR(totalSavings), margin + 4, y + 11.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...GREY);
+    doc.text(`${savingsPct!.toFixed(1)}% reduction vs grid-only`, pageW - margin - 4, y + 5.5, { align: 'right' });
+    doc.setFontSize(6.5);
+    doc.text(`Self-supply: ${selfSupplyPct.toFixed(1)}%  (${fmtKwh(selfSupplyKwh)} kWh of ${fmtKwh(totalLoad)} kWh total load)`, pageW - margin - 4, y + 11, { align: 'right' });
+    y += 18;
+  }
+
+  // ── SECTION: PV & BESS Summary ────────────────────────────────────────────
+  const hasPvBess = data.solarGenerationKwh > 0 || data.bessEnergyByPeriod != null || data.measuredGhiWhM2 != null;
+  if (hasPvBess) {
+    section('PV & BESS');
+
+    // PV Generated row
+    if (data.solarGenerationKwh > 0) {
+      const pvValueZar = r2(data.solarGenerationKwh * DEFAULT_TOU_RATES.standard);
+      const pvCols = [
+        { label: 'Description',  x: margin + 3,              align: 'left'  as const },
+        { label: 'Value',        x: margin + contentW - 50,  align: 'right' as const },
+        { label: 'Unit',         x: margin + contentW - 2,   align: 'right' as const },
+      ];
+      tableHeader(pvCols);
+
+      tableRow([
+        { text: 'PV Generated Energy', x: margin + 3, align: 'left', bold: true, color: AMBER },
+        { text: fmtKwh(data.solarGenerationKwh), x: margin + contentW - 50, align: 'right' },
+        { text: 'kWh', x: margin + contentW - 2, align: 'right' },
+      ], false);
+      tableRow([
+        { text: 'PV Generated Energy (value at standard rate)', x: margin + 3, align: 'left' },
+        { text: pvValueZar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 50, align: 'right', bold: true, color: GREEN },
+        { text: 'ZAR (excl. VAT)', x: margin + contentW - 2, align: 'right' },
+      ], true);
+
+      if (data.targetKwh > 0) {
+        const pct = (data.solarGenerationKwh / data.targetKwh) * 100;
+        const pctColor = (pct >= 95 ? GREEN : pct >= 80 ? AMBER : RED) as [number, number, number];
+        tableRow([
+          { text: 'Actual PV vs Target (SEM Financial Model)', x: margin + 3, align: 'left' },
+          { text: `${pct.toFixed(0)}%`, x: margin + contentW - 50, align: 'right', bold: true, color: pctColor },
+          { text: '%', x: margin + contentW - 2, align: 'right' },
+        ], false);
+      }
+      y += 2;
+    }
+
+    // Irradiance rows
+    if (data.measuredGhiWhM2 != null) {
+      const ghiKwhM2 = (data.measuredGhiWhM2 / 1000).toFixed(1);
+      tableRow([
+        { text: 'Measured Global Horizontal Irradiance (GHI)', x: margin + 3, align: 'left' },
+        { text: ghiKwhM2, x: margin + contentW - 50, align: 'right', bold: true },
+        { text: 'kWh/m²', x: margin + contentW - 2, align: 'right' },
+      ], false);
+      y += 2;
+    }
+
+    // BESS savings by TOU period
+    if (data.bessEnergyByPeriod != null) {
+      const b = data.bessEnergyByPeriod;
+      y += 3;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...DARK);
+      doc.text('BESS Discharge Energy by TOU Period', margin + 3, y + 4.5);
+      y += HDR_H;
+
+      const bessCols = [
+        { label: 'TOU Period',    x: margin + 3,              align: 'left'  as const },
+        { label: 'Discharge kWh', x: margin + contentW - 80,  align: 'right' as const },
+        { label: 'TOU Rate',      x: margin + contentW - 44,  align: 'right' as const },
+        { label: 'Saving (R)',    x: margin + contentW - 2,   align: 'right' as const },
+      ];
+      tableHeader(bessCols);
+
+      [
+        { label: 'Peak',     kwh: b.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     saving: b.peakSavings,     color: RED  as readonly [number,number,number] },
+        { label: 'Standard', kwh: b.standardKwh, rate: DEFAULT_TOU_RATES.standard, saving: b.standardSavings, color: AMBER as readonly [number,number,number] },
+        { label: 'Off-Peak', kwh: b.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  saving: b.offpeakSavings,  color: BLUE as readonly [number,number,number] },
+      ].forEach((row, i) => tableRow([
+        { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
+        { text: fmtKwh(row.kwh), x: margin + contentW - 80, align: 'right' },
+        { text: row.rate.toFixed(4), x: margin + contentW - 44, align: 'right' },
+        { text: row.saving.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true, color: GREEN as readonly [number,number,number] },
+      ], i % 2 === 1));
+
+      totalRow('BESS ENERGY SAVING', `${fmtKwh(b.totalKwh)} kWh`, fmtR(b.totalSavings));
+      y += 2;
+    }
+  }
+
   // ── FOOTER ───────────────────────────────────────────────────────────────
   const pageH = 297;
   doc.setDrawColor(...BORDER);
@@ -934,12 +1034,13 @@ const EnergyReportTab: React.FC = () => {
     setLastReport(null);
 
     try {
-      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow] = await Promise.all([
+      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow, ghiWhM2] = await Promise.all([
         fetchMonthlyGridEnergyHourly(user.token, year, month, site),
         fetchMonthlyPeakDemand(user.token, year, month, site).catch(() => null),
         fetchMonthlyLoadEnergyHourly(user.token, year, month, site).catch(() => null),
         fetchDailyProduction(user.token, daysCount, site, { startDate, endDate }).catch(() => null),
         fetchMonthlyPowerFlow(user.token, year, month, site).catch(() => null),
+        fetchMonthlyIrradiance(user.token, year, month, site).catch(() => null),
       ]);
 
       const included = calculateTouCharges(hourlyGrid);
@@ -948,6 +1049,9 @@ const EnergyReportTab: React.FC = () => {
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
         : 0;
+      const bessEnergyByPeriod = powerFlow && powerFlow.length > 0
+        ? calculateBessTouSavings(powerFlow)
+        : null;
 
       const reportData: ReportData = {
         monthKey: selectedKey,
@@ -959,6 +1063,8 @@ const EnergyReportTab: React.FC = () => {
         solarGenerationKwh,
         targetKwh,
         powerFlow: powerFlow && powerFlow.length > 0 ? powerFlow : null,
+        bessEnergyByPeriod,
+        measuredGhiWhM2: ghiWhM2 ?? null,
       };
 
       setLastReport(reportData);
