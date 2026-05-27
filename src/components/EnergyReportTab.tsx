@@ -902,6 +902,25 @@ function generatePdf(data: ReportData) {
     if (data.bessEnergyByPeriod != null) {
       const b = data.bessEnergyByPeriod;
 
+      // Required vertical space for the entire BESS block (header + 5 rows + summary + footnote).
+      // If it doesn't fit above the footer line (≈285mm), start a new page so it renders cleanly.
+      const BESS_BLOCK_H = 4 + 6.5 + 5 + HDR_H + ROW_H * 3 + TOT_H + 4 + 17 + 2 + 6 + 4;
+      if (y + BESS_BLOCK_H > 270) {
+        doc.addPage();
+        // Re-draw the dark page header used on other content pages
+        doc.setFillColor(...DARK);
+        doc.rect(0, 0, pageW, 22, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('ENERGY REPORT (cont.)', pageW - margin, 9, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
+        y = 28;
+        section('PV & BESS (cont.)');
+      }
+
       // Column x-positions for 6-column merged table
       const bPeriod = margin + 3;
       const bRate   = margin + 34;
