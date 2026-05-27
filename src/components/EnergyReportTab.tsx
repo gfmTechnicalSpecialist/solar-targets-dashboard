@@ -10,6 +10,7 @@ import {
   fetchDailyProduction,
   fetchMonthlyPowerFlow,
   fetchMonthlyIrradiance,
+  fetchMonthlyBessEnergyDeltas,
 } from '../api/higeco';
 import type { PowerFlowPoint } from '../api/higeco';
 import {
@@ -1068,13 +1069,14 @@ const EnergyReportTab: React.FC = () => {
     setLastReport(null);
 
     try {
-      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow, ghiWhM2] = await Promise.all([
+      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow, ghiWhM2, bessDeltas] = await Promise.all([
         fetchMonthlyGridEnergyHourly(user.token, year, month, site),
         fetchMonthlyPeakDemand(user.token, year, month, site).catch(() => null),
         fetchMonthlyLoadEnergyHourly(user.token, year, month, site).catch(() => null),
         fetchDailyProduction(user.token, daysCount, site, { startDate, endDate }).catch(() => null),
         fetchMonthlyPowerFlow(user.token, year, month, site).catch(() => null),
         fetchMonthlyIrradiance(user.token, year, month, site).catch(() => null),
+        fetchMonthlyBessEnergyDeltas(user.token, year, month, site).catch(() => null),
       ]);
 
       const included = calculateTouCharges(hourlyGrid);
@@ -1083,8 +1085,8 @@ const EnergyReportTab: React.FC = () => {
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
         : 0;
-      const bessEnergyByPeriod = powerFlow && powerFlow.length > 0
-        ? calculateBessTouSavings(powerFlow)
+      const bessEnergyByPeriod = bessDeltas && bessDeltas.length > 0
+        ? calculateBessTouSavings(bessDeltas)
         : null;
 
       const reportData: ReportData = {

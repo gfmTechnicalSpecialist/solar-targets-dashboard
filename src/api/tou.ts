@@ -183,18 +183,17 @@ export interface BessTouSavings {
 }
 
 /**
- * Calculate BESS energy savings and charging costs by TOU period from 30-min power-flow points.
- * bessKw > 0 = discharging (displaces grid imports → saving)
- * bessKw < 0 = charging   (consumes grid energy → cost)
+ * Calculate BESS energy savings and charging costs by TOU period from hourly
+ * signed delta data (as returned by fetchMonthlyBessEnergyDeltas).
+ * kwhDelta > 0 = net discharge during that hour (displaces grid imports → saving)
+ * kwhDelta < 0 = net charge during that hour (consumes grid energy → cost)
  * Net saving = discharge savings − charge cost.
  *
- * @param points    Array of objects exposing timestamp (SAST-expressed-as-UTC) and bessKw.
- * @param intervalH Width of each sample interval in hours (default 0.5 for 30-min data).
- * @param rates     TOU energy rates to apply (default: DEFAULT_TOU_RATES).
+ * @param points  Hourly BESS energy points with signed kwhDelta.
+ * @param rates   TOU energy rates to apply (default: DEFAULT_TOU_RATES).
  */
 export function calculateBessTouSavings(
-  points: Array<{ timestamp: number; bessKw: number }>,
-  intervalH = 0.5,
+  points: Array<{ timestamp: number; kwhDelta: number }>,
   rates: TouRates = DEFAULT_TOU_RATES,
 ): BessTouSavings {
   const SAST_OFFSET_MS = 2 * 3600 * 1000;
@@ -202,12 +201,12 @@ export function calculateBessTouSavings(
   let chargePeakKwh = 0, chargeStandardKwh = 0, chargeOffpeakKwh = 0;
 
   for (const p of points) {
-    if (p.bessKw === 0) continue;
-    const kwh = Math.abs(p.bessKw) * intervalH;
+    if (p.kwhDelta === 0) continue;
+    const kwh = Math.abs(p.kwhDelta);
     const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
     const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
 
-    if (p.bessKw > 0) {
+    if (p.kwhDelta > 0) {
       // Discharging
       if (period === 'peak')          peakKwh    += kwh;
       else if (period === 'standard') standardKwh += kwh;

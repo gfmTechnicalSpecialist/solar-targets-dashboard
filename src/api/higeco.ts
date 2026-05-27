@@ -38,6 +38,11 @@ interface SiteHigecoConfig {
     idLog: number;
     items: number[];
   };
+  /** Cumulative BESS net energy meter (kWh, Total_BESS_Active_Energy) — signed, period=3600 */
+  bessEnergy?: {
+    idLog: number;
+    items: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -72,6 +77,10 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     bess: {
       idLog: 1999098,
       items: [1999098116],
+    },
+    bessEnergy: {
+      idLog: 1999098,
+      items: [1999098134],
     },
   },
   centurion: {
@@ -763,6 +772,104 @@ export async function fetchMonthlyPeakDemand(
   }
 
   return Math.round(maxKva * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// Monthly BESS energy deltas (signed — discharge +, charge −)
+// ---------------------------------------------------------------------------
+
+export interface BessEnergyPoint {
+  /** UTC unix timestamp of the SAST-hour boundary */
+  timestamp: number;
+  /**
+   * Net BESS energy for this hour (kWh).
+   * Positive  = net discharge (energy exported from BESS to site)
+   * Negative  = net charge   (energy drawn from grid/PV into BESS)
+   */
+  kwhDelta: number;
+}
+
+/**
+ * Fetch hourly BESS net energy deltas for the given month using the
+ * cumulative Total_BESS_Active_Energy meter (item 1999098134).
+ * Consecutive-reading deltas preserve their sign so discharge and charging
+ * periods can be separated for TOU cost analysis.
+ */
+export async function fetchMonthlyBessEnergyDeltas(
+  token: string,
+  year: number,
+  month: number,
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<BessEnergyPoint[]> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.bessEnergy) return [];
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const queryPayload = JSON.stringify([{
+    act: 'getDataLog',
+    idReq: 'graphsCall',
+    sn: cfg.sn,
+    DATI: {
+      idLog: cfg.bessEnergy.idLog,
+      start: startUtc,
+      stop: stopUtc,
+      maxNumRecord: 100000,
+      period: '3600',
+      zeroTimeOffset: 0,
+      items: cfg.bessEnergy.items,
+    },
+  }]);
+
+  const body = new URLSearchParams();
+  body.set('query', queryPayload);
+
+  const res = await fetch(EQUIPMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Higeco-Token': token,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+  const json = await res.json();
+
+  if (isSessionExpiredResponse(json)) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  const outer = json?.DATI?.[0]?.DATI;
+  if (!outer?.dati) return [];
+
+  const raw: [number, number, string][] = outer.dati;
+  raw.sort((a, b) => a[0] - b[0]);
+
+  if (raw.length < 2) return [];
+
+  // Bin signed deltas into SAST-hour buckets (preserve sign — unlike grid/load which drop negatives)
+  const hourlyBuckets = new Map<number, number>();
+  for (let i = 1; i < raw.length; i++) {
+    const prev = parseFloat(raw[i - 1][2]) || 0;
+    const curr = parseFloat(raw[i][2])     || 0;
+    const delta = curr - prev;
+    if (delta === 0) continue;
+    const sastHourStartUtc = Math.floor((raw[i][0] + SAST_OFFSET_S) / 3600) * 3600 - SAST_OFFSET_S;
+    hourlyBuckets.set(sastHourStartUtc, (hourlyBuckets.get(sastHourStartUtc) ?? 0) + delta);
+  }
+
+  const result: BessEnergyPoint[] = [];
+  for (const [ts, kwh] of hourlyBuckets) {
+    result.push({ timestamp: ts, kwhDelta: Math.round(kwh * 1000) / 1000 });
+  }
+  result.sort((a, b) => a.timestamp - b.timestamp);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
