@@ -108,7 +108,6 @@ function drawPowerFlowCharts(
   points: PowerFlowPoint[],
   monthLabel: string,
 ): WeekChartResult[] {
-  const SAST_S   = 2 * 3600;
   const MO_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -128,7 +127,7 @@ function drawPowerFlowCharts(
   // ── Group by Mon-start week (SAST) ───────────────────────────────────────
   const weekMap = new Map<string, PowerFlowPoint[]>();
   for (const p of points) {
-    const d   = new Date((p.timestamp + SAST_S) * 1000);
+    const d   = new Date(p.timestamp * 1000);
     const dow = d.getUTCDay();
     const mon = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - (dow + 6) % 7));
     const key = mon.toISOString().slice(0, 10);
@@ -272,7 +271,7 @@ function drawPowerFlowCharts(
     // Vertical day separators + day labels
     const seenDays = new Set<string>();
     for (const p of weekPoints) {
-      const d      = new Date((p.timestamp + SAST_S) * 1000);
+      const d      = new Date(p.timestamp * 1000);
       const dayKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       if (!seenDays.has(dayKey)) {
         seenDays.add(dayKey);
