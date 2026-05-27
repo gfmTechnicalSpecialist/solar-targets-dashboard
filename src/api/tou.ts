@@ -185,9 +185,14 @@ export interface BessTouSavings {
 /**
  * Calculate BESS energy savings and charging costs by TOU period from hourly
  * signed delta data (as returned by fetchMonthlyBessEnergyDeltas).
- * kwhDelta < 0 = net discharge during that hour (displaces grid imports → saving)
- * kwhDelta > 0 = net charge during that hour (consumes grid energy → cost)
- * Net saving = discharge savings − charge cost.
+ *
+ * Sign convention (matches the Total_BESS_Active_Energy meter / PDC Excel):
+ *   kwhDelta > 0 = net discharge during that hour (displaces grid imports → saving)
+ *   kwhDelta < 0 = net charge during that hour (consumes grid energy → cost)
+ *
+ * Per-row economic value = kwhDelta * rate (signed):
+ *   discharge × rate = +saving, charge × rate = -cost (i.e. negative saving).
+ * Net BESS saving = sum of discharge savings minus sum of charge costs.
  *
  * @param points  Hourly BESS energy points with signed kwhDelta.
  * @param rates   TOU energy rates to apply (default: DEFAULT_TOU_RATES).
@@ -206,13 +211,13 @@ export function calculateBessTouSavings(
     const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
     const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
 
-    if (p.kwhDelta < 0) {
-      // Discharging (meter delta negative = energy leaving the battery)
+    if (p.kwhDelta > 0) {
+      // Discharging (meter delta positive = energy leaving the battery)
       if (period === 'peak')          peakKwh    += kwh;
       else if (period === 'standard') standardKwh += kwh;
       else                            offpeakKwh  += kwh;
     } else {
-      // Charging (meter delta positive = energy entering the battery)
+      // Charging (meter delta negative = energy entering the battery)
       if (period === 'peak')          chargePeakKwh    += kwh;
       else if (period === 'standard') chargeStandardKwh += kwh;
       else                            chargeOffpeakKwh  += kwh;
