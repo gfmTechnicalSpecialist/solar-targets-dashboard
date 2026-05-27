@@ -902,143 +902,157 @@ function generatePdf(data: ReportData) {
     if (data.bessEnergyByPeriod != null) {
       const b = data.bessEnergyByPeriod;
 
+      // Column x-positions for 6-column merged table
+      const bPeriod = margin + 3;
+      const bRate   = margin + 34;
+      const bDisKwh = margin + 72;
+      const bDisR   = margin + 108;
+      const bChgKwh = margin + 146;
+      const bChgR   = margin + contentW;
+
       // ── BESS sub-section header ──────────────────────────────────────────
       y += 4;
       doc.setFillColor(...DARK);
-      doc.rect(margin, y, contentW, 8, 'F');
+      doc.rect(margin, y, contentW, 6.5, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(255, 255, 255);
-      doc.text('BESS Energy Analysis', margin + 4, y + 5.2);
+      doc.text('BESS Energy Analysis', bPeriod, y + 4.4);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6);
-      doc.text('Discharge saves grid import cost  |  Charge = grid energy consumed to fill BESS', margin + contentW, y + 5.2, { align: 'right' });
-      y += 8;
+      doc.text('Discharge = saving at TOU rate  |  Charging = grid cost at TOU rate', margin + contentW, y + 4.4, { align: 'right' });
+      y += 6.5;
 
-      const bessEnergyCols = [
-        { label: 'TOU Period', x: margin + 3,              align: 'left'  as const },
-        { label: 'kWh',        x: margin + contentW - 52,  align: 'right' as const },
-        { label: 'Rate (R/kWh)', x: margin + contentW - 22, align: 'right' as const },
-        { label: 'Value (R)',  x: margin + contentW - 2,   align: 'right' as const },
-      ];
+      // ── Split colour sub-header row ──────────────────────────────────────
+      // Green half (discharge)
+      doc.setFillColor(220, 252, 231);
+      doc.rect(bDisKwh - 30, y, bDisR - bDisKwh + 30 + 2, 5, 'F');
+      // Red half (charge)
+      doc.setFillColor(254, 226, 226);
+      doc.rect(bChgKwh - 30, y, bChgR - bChgKwh + 30 + 2, 5, 'F');
 
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+      doc.setTextColor(...GREEN as [number,number,number]);
+      doc.text('DISCHARGE', (bDisKwh + bDisR) / 2, y + 3.4, { align: 'center' });
+      doc.setTextColor(...RED as [number,number,number]);
+      doc.text('CHARGING', (bChgKwh + bChgR) / 2, y + 3.4, { align: 'center' });
+      y += 5;
+
+      // ── Column header row ────────────────────────────────────────────────
+      doc.setFillColor(...DARK);
+      doc.rect(margin, y, contentW, HDR_H, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Period',      bPeriod, y + 4.1);
+      doc.text('Rate (R/kWh)', bRate,  y + 4.1, { align: 'right' });
+      doc.text('Dis. kWh',    bDisKwh, y + 4.1, { align: 'right' });
+      doc.text('Saving (R)',  bDisR,   y + 4.1, { align: 'right' });
+      doc.text('Chg. kWh',   bChgKwh, y + 4.1, { align: 'right' });
+      doc.text('Cost (R)',    bChgR,   y + 4.1, { align: 'right' });
+      y += HDR_H;
+
+      // ── 3 data rows ──────────────────────────────────────────────────────
       const periodData = [
         { label: 'Peak',     color: RED  as readonly [number,number,number], rate: DEFAULT_TOU_RATES.peak,     disKwh: b.peakKwh,     disVal: b.peakSavings,     chgKwh: b.chargePeakKwh,     chgVal: b.chargePeakCost },
         { label: 'Standard', color: AMBER as readonly [number,number,number], rate: DEFAULT_TOU_RATES.standard, disKwh: b.standardKwh, disVal: b.standardSavings, chgKwh: b.chargeStandardKwh, chgVal: b.chargeStandardCost },
         { label: 'Off-Peak', color: BLUE as readonly [number,number,number],  rate: DEFAULT_TOU_RATES.offpeak,  disKwh: b.offpeakKwh,  disVal: b.offpeakSavings,  chgKwh: b.chargeOffpeakKwh,  chgVal: b.chargeOffpeakCost },
       ];
 
-      // ── Discharge table ──────────────────────────────────────────────────
-      doc.setFillColor(249, 250, 251);
-      doc.rect(margin, y, contentW, 5.5, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
-      doc.setTextColor(...DARK);
-      doc.text('Discharge  (BESS supplying site load)', margin + 4, y + 3.8);
-      doc.setTextColor(...GREEN as [number,number,number]);
-      doc.text('Saving = kWh x TOU rate', margin + contentW, y + 3.8, { align: 'right' });
-      y += 5.5;
+      periodData.forEach((row, i) => {
+        if (i % 2 === 1) {
+          doc.setFillColor(...BG_LIGHT);
+          doc.rect(margin, y, contentW, ROW_H, 'F');
+        }
+        doc.setDrawColor(...BORDER);
+        doc.line(margin, y + ROW_H, margin + contentW, y + ROW_H);
+        doc.setFontSize(6.5);
 
-      tableHeader(bessEnergyCols);
-      periodData.forEach((row, i) => tableRow([
-        { text: row.label,               x: margin + 3,              align: 'left',  bold: true, color: row.color },
-        { text: fmtKwh(row.disKwh),      x: margin + contentW - 52,  align: 'right' },
-        { text: row.rate.toFixed(4),     x: margin + contentW - 22,  align: 'right' },
-        { text: row.disVal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          x: margin + contentW - 2, align: 'right', bold: true, color: GREEN as readonly [number,number,number] },
-      ], i % 2 === 1));
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...row.color);
+        doc.text(row.label, bPeriod, y + 4.1);
 
-      // Discharge total
-      doc.setFillColor(220, 252, 231);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GREY);
+        doc.text(row.rate.toFixed(4), bRate, y + 4.1, { align: 'right' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...DARK);
+        doc.text(fmtKwh(row.disKwh), bDisKwh, y + 4.1, { align: 'right' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...GREEN as [number,number,number]);
+        doc.text(row.disVal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), bDisR, y + 4.1, { align: 'right' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...DARK);
+        doc.text(fmtKwh(row.chgKwh), bChgKwh, y + 4.1, { align: 'right' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...RED as [number,number,number]);
+        doc.text(row.chgVal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), bChgR, y + 4.1, { align: 'right' });
+
+        y += ROW_H;
+      });
+
+      // ── Totals row ───────────────────────────────────────────────────────
+      doc.setFillColor(...DARK);
       doc.rect(margin, y, contentW, TOT_H, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.setTextColor(...DARK);
-      doc.text('Total Discharge', margin + 4, y + 4.8);
-      doc.setTextColor(...DARK);
-      doc.text(`${fmtKwh(b.totalKwh)} kWh`, margin + contentW - 52, y + 4.8, { align: 'right' });
-      doc.setTextColor(...GREEN as [number,number,number]);
-      doc.text(fmtR(b.totalSavings), margin + contentW - 2, y + 4.8, { align: 'right' });
-      y += TOT_H + 6;
-
-      // ── Charge table ─────────────────────────────────────────────────────
-      doc.setFillColor(249, 250, 251);
-      doc.rect(margin, y, contentW, 5.5, 'F');
-      doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
-      doc.setTextColor(...DARK);
-      doc.text('Charging  (grid energy consumed to fill BESS)', margin + 4, y + 3.8);
+      doc.setTextColor(255, 255, 255);
+      doc.text('TOTALS', bPeriod, y + 4.8);
+      doc.setTextColor(...GREEN as [number,number,number]);
+      doc.text(fmtKwh(b.totalKwh) + ' kWh', bDisKwh, y + 4.8, { align: 'right' });
+      doc.text(fmtR(b.totalSavings), bDisR, y + 4.8, { align: 'right' });
       doc.setTextColor(...RED as [number,number,number]);
-      doc.text('Cost = kWh x TOU rate at time of charging', margin + contentW, y + 3.8, { align: 'right' });
-      y += 5.5;
+      doc.text(fmtKwh(b.totalChargeKwh) + ' kWh', bChgKwh, y + 4.8, { align: 'right' });
+      doc.text(`-${fmtR(b.totalChargeCost)}`, bChgR, y + 4.8, { align: 'right' });
+      y += TOT_H + 4;
 
-      tableHeader(bessEnergyCols);
-      periodData.forEach((row, i) => tableRow([
-        { text: row.label,               x: margin + 3,              align: 'left',  bold: true, color: row.color },
-        { text: fmtKwh(row.chgKwh),      x: margin + contentW - 52,  align: 'right' },
-        { text: row.rate.toFixed(4),     x: margin + contentW - 22,  align: 'right' },
-        { text: row.chgVal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          x: margin + contentW - 2, align: 'right', bold: true, color: RED as readonly [number,number,number] },
-      ], i % 2 === 1));
-
-      // Charge total
-      doc.setFillColor(254, 226, 226);
-      doc.rect(margin, y, contentW, TOT_H, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.setTextColor(...DARK);
-      doc.text('Total Charging Cost', margin + 4, y + 4.8);
-      doc.setTextColor(...DARK);
-      doc.text(`${fmtKwh(b.totalChargeKwh)} kWh`, margin + contentW - 52, y + 4.8, { align: 'right' });
-      doc.setTextColor(...RED as [number,number,number]);
-      doc.text(`-${fmtR(b.totalChargeCost)}`, margin + contentW - 2, y + 4.8, { align: 'right' });
-      y += TOT_H + 6;
-
-      // ── Reconciliation summary box ───────────────────────────────────────
-      const boxH = 28;
+      // ── Compact reconciliation strip ─────────────────────────────────────
+      const boxH = 17;
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(...BORDER);
       doc.roundedRect(margin, y, contentW, boxH, 2, 2, 'FD');
 
-      const col1 = margin + contentW * 0.28;
-      const col2 = margin + contentW * 0.56;
-      const col3 = margin + contentW - 4;
+      const c1 = margin + contentW * 0.28;
+      const c2 = margin + contentW * 0.57;
+      const c3 = margin + contentW - 4;
 
-      // Column headers
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.5);
       doc.setTextColor(...GREY);
-      doc.text('Gross Discharge Saving', col1, y + 6, { align: 'right' });
-      doc.text('Less: Charge Cost', col2, y + 6, { align: 'right' });
-      doc.text('Net BESS Saving', col3, y + 6, { align: 'right' });
+      doc.text('Gross Discharge Saving', c1, y + 5, { align: 'right' });
+      doc.text('Less: Charge Cost', c2, y + 5, { align: 'right' });
+      doc.text('Net BESS Saving', c3, y + 5, { align: 'right' });
 
-      // Divider
       doc.setDrawColor(...BORDER);
-      doc.line(margin + 4, y + 8, margin + contentW - 4, y + 8);
+      doc.line(margin + 4, y + 6.5, margin + contentW - 4, y + 6.5);
 
-      // Values
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(9);
       doc.setTextColor(...GREEN as [number,number,number]);
-      doc.text(fmtR(b.totalSavings), col1, y + 17, { align: 'right' });
-
+      doc.text(fmtR(b.totalSavings), c1, y + 13, { align: 'right' });
       doc.setTextColor(...RED as [number,number,number]);
-      doc.text(`-${fmtR(b.totalChargeCost)}`, col2, y + 17, { align: 'right' });
-
+      doc.text(`-${fmtR(b.totalChargeCost)}`, c2, y + 13, { align: 'right' });
       const netColor = b.netSavings >= 0 ? GREEN : RED;
       doc.setTextColor(...netColor as [number,number,number]);
-      doc.text(fmtR(b.netSavings), col3, y + 17, { align: 'right' });
+      doc.text(fmtR(b.netSavings), c3, y + 13, { align: 'right' });
+      y += boxH + 2;
 
-      // Round-trip efficiency badge
+      // Round-trip efficiency footnote
       if (b.roundTripEfficiency != null) {
         const rtePct = (b.roundTripEfficiency * 100).toFixed(1);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(6.5);
+        doc.setFontSize(6);
         doc.setTextColor(...GREY);
-        doc.text(`Round-trip efficiency: ${fmtKwh(b.totalKwh)} kWh out / ${fmtKwh(b.totalChargeKwh)} kWh in = ${rtePct}%`, margin + 4, y + 25);
+        doc.text(`Round-trip efficiency: ${fmtKwh(b.totalKwh)} kWh out / ${fmtKwh(b.totalChargeKwh)} kWh in = ${rtePct}%`, margin + 3, y + 3.5);
+        y += 5;
       }
 
-      y += boxH + 4;
+      y += 2;
     }
   }
 
