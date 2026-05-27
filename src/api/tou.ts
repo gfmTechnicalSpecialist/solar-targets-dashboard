@@ -185,8 +185,8 @@ export interface BessTouSavings {
 /**
  * Calculate BESS energy savings and charging costs by TOU period from hourly
  * signed delta data (as returned by fetchMonthlyBessEnergyDeltas).
- * kwhDelta < 0 = net discharge during that hour (displaces grid imports → saving)
- * kwhDelta > 0 = net charge during that hour (consumes grid energy → cost)
+ * kwhDelta > 0 = net discharge during that hour (displaces grid imports → saving)
+ * kwhDelta < 0 = net charge during that hour (consumes grid energy → cost)
  * Net saving = discharge savings − charge cost.
  *
  * @param points  Hourly BESS energy points with signed kwhDelta.
@@ -206,7 +206,7 @@ export function calculateBessTouSavings(
     const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
     const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
 
-    if (p.kwhDelta < 0) {
+    if (p.kwhDelta > 0) {
       // Discharging
       if (period === 'peak')          peakKwh    += kwh;
       else if (period === 'standard') standardKwh += kwh;
