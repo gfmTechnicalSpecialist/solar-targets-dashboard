@@ -156,22 +156,37 @@ export function calculateTouCharges(
 }
 
 export interface BessTouSavings {
-  /** BESS discharge energy by TOU period (kWh) */
+  /** BESS discharge energy by TOU period (kWh, positive) */
   peakKwh: number;
   standardKwh: number;
   offpeakKwh: number;
   totalKwh: number;
-  /** Cost savings — what would have been paid if grid supplied this instead (R, excl. VAT) */
+  /** Cost savings — what would have been paid if grid supplied discharge energy instead (R, excl. VAT) */
   peakSavings: number;
   standardSavings: number;
   offpeakSavings: number;
   totalSavings: number;
+  /** BESS charging energy by TOU period (kWh, positive magnitude) */
+  chargePeakKwh: number;
+  chargeStandardKwh: number;
+  chargeOffpeakKwh: number;
+  totalChargeKwh: number;
+  /** Cost of charging — grid energy consumed to charge the BESS at the applicable TOU rate (R, excl. VAT) */
+  chargePeakCost: number;
+  chargeStandardCost: number;
+  chargeOffpeakCost: number;
+  totalChargeCost: number;
+  /** Net saving = totalSavings − totalChargeCost (round-trip net benefit) */
+  netSavings: number;
+  /** Round-trip efficiency = totalKwh / totalChargeKwh (0–1), null if no charging recorded */
+  roundTripEfficiency: number | null;
 }
 
 /**
- * Calculate BESS energy savings by TOU period from 30-min power-flow points.
- * When bessKw > 0 the BESS is discharging; that energy displaced grid imports.
- * Savings = discharge_kWh × applicable TOU rate.
+ * Calculate BESS energy savings and charging costs by TOU period from 30-min power-flow points.
+ * bessKw > 0 = discharging (displaces grid imports → saving)
+ * bessKw < 0 = charging   (consumes grid energy → cost)
+ * Net saving = discharge savings − charge cost.
  *
  * @param points    Array of objects exposing timestamp (SAST-expressed-as-UTC) and bessKw.
  * @param intervalH Width of each sample interval in hours (default 0.5 for 30-min data).
@@ -183,29 +198,52 @@ export function calculateBessTouSavings(
   rates: TouRates = DEFAULT_TOU_RATES,
 ): BessTouSavings {
   const SAST_OFFSET_MS = 2 * 3600 * 1000;
-  let peakKwh = 0;
-  let standardKwh = 0;
-  let offpeakKwh = 0;
+  let peakKwh = 0, standardKwh = 0, offpeakKwh = 0;
+  let chargePeakKwh = 0, chargeStandardKwh = 0, chargeOffpeakKwh = 0;
 
   for (const p of points) {
-    if (p.bessKw <= 0) continue;
-    const kwh = p.bessKw * intervalH;
+    if (p.bessKw === 0) continue;
+    const kwh = Math.abs(p.bessKw) * intervalH;
     const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
     const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
-    if (period === 'peak')          peakKwh    += kwh;
-    else if (period === 'standard') standardKwh += kwh;
-    else                            offpeakKwh  += kwh;
+
+    if (p.bessKw > 0) {
+      // Discharging
+      if (period === 'peak')          peakKwh    += kwh;
+      else if (period === 'standard') standardKwh += kwh;
+      else                            offpeakKwh  += kwh;
+    } else {
+      // Charging
+      if (period === 'peak')          chargePeakKwh    += kwh;
+      else if (period === 'standard') chargeStandardKwh += kwh;
+      else                            chargeOffpeakKwh  += kwh;
+    }
   }
 
+  const totalKwh       = peakKwh + standardKwh + offpeakKwh;
+  const totalChargeKwh = chargePeakKwh + chargeStandardKwh + chargeOffpeakKwh;
+  const totalSavings   = peakKwh * rates.peak + standardKwh * rates.standard + offpeakKwh * rates.offpeak;
+  const totalChargeCost = chargePeakKwh * rates.peak + chargeStandardKwh * rates.standard + chargeOffpeakKwh * rates.offpeak;
+
   return {
-    peakKwh:         r2(peakKwh),
-    standardKwh:     r2(standardKwh),
-    offpeakKwh:      r2(offpeakKwh),
-    totalKwh:        r2(peakKwh + standardKwh + offpeakKwh),
-    peakSavings:     r2(peakKwh     * rates.peak),
-    standardSavings: r2(standardKwh * rates.standard),
-    offpeakSavings:  r2(offpeakKwh  * rates.offpeak),
-    totalSavings:    r2(peakKwh * rates.peak + standardKwh * rates.standard + offpeakKwh * rates.offpeak),
+    peakKwh:              r2(peakKwh),
+    standardKwh:          r2(standardKwh),
+    offpeakKwh:           r2(offpeakKwh),
+    totalKwh:             r2(totalKwh),
+    peakSavings:          r2(peakKwh     * rates.peak),
+    standardSavings:      r2(standardKwh * rates.standard),
+    offpeakSavings:       r2(offpeakKwh  * rates.offpeak),
+    totalSavings:         r2(totalSavings),
+    chargePeakKwh:        r2(chargePeakKwh),
+    chargeStandardKwh:    r2(chargeStandardKwh),
+    chargeOffpeakKwh:     r2(chargeOffpeakKwh),
+    totalChargeKwh:       r2(totalChargeKwh),
+    chargePeakCost:       r2(chargePeakKwh    * rates.peak),
+    chargeStandardCost:   r2(chargeStandardKwh * rates.standard),
+    chargeOffpeakCost:    r2(chargeOffpeakKwh  * rates.offpeak),
+    totalChargeCost:      r2(totalChargeCost),
+    netSavings:           r2(totalSavings - totalChargeCost),
+    roundTripEfficiency:  totalChargeKwh > 0 ? r2(totalKwh / totalChargeKwh) : null,
   };
 }
 

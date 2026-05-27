@@ -909,24 +909,69 @@ function generatePdf(data: ReportData) {
 
       const bessCols = [
         { label: 'TOU Period',    x: margin + 3,              align: 'left'  as const },
-        { label: 'Discharge kWh', x: margin + contentW - 80,  align: 'right' as const },
-        { label: 'TOU Rate',      x: margin + contentW - 44,  align: 'right' as const },
-        { label: 'Saving (R)',    x: margin + contentW - 2,   align: 'right' as const },
+        { label: 'Discharge kWh', x: margin + contentW - 100, align: 'right' as const },
+        { label: 'Charge kWh',    x: margin + contentW - 66,  align: 'right' as const },
+        { label: 'Rate (R/kWh)',  x: margin + contentW - 32,  align: 'right' as const },
+        { label: 'Net Saving (R)',x: margin + contentW - 2,   align: 'right' as const },
       ];
       tableHeader(bessCols);
 
       [
-        { label: 'Peak',     kwh: b.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     saving: b.peakSavings,     color: RED  as readonly [number,number,number] },
-        { label: 'Standard', kwh: b.standardKwh, rate: DEFAULT_TOU_RATES.standard, saving: b.standardSavings, color: AMBER as readonly [number,number,number] },
-        { label: 'Off-Peak', kwh: b.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  saving: b.offpeakSavings,  color: BLUE as readonly [number,number,number] },
-      ].forEach((row, i) => tableRow([
-        { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
-        { text: fmtKwh(row.kwh), x: margin + contentW - 80, align: 'right' },
-        { text: row.rate.toFixed(4), x: margin + contentW - 44, align: 'right' },
-        { text: row.saving.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true, color: GREEN as readonly [number,number,number] },
-      ], i % 2 === 1));
+        { label: 'Peak',     disKwh: b.peakKwh,     chgKwh: b.chargePeakKwh,     rate: DEFAULT_TOU_RATES.peak,     saving: b.peakSavings,     chgCost: b.chargePeakCost,     color: RED  as readonly [number,number,number] },
+        { label: 'Standard', disKwh: b.standardKwh, chgKwh: b.chargeStandardKwh, rate: DEFAULT_TOU_RATES.standard, saving: b.standardSavings, chgCost: b.chargeStandardCost, color: AMBER as readonly [number,number,number] },
+        { label: 'Off-Peak', disKwh: b.offpeakKwh,  chgKwh: b.chargeOffpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  saving: b.offpeakSavings,  chgCost: b.chargeOffpeakCost,  color: BLUE as readonly [number,number,number] },
+      ].forEach((row, i) => {
+        const net = r2(row.saving - row.chgCost);
+        tableRow([
+          { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
+          { text: fmtKwh(row.disKwh), x: margin + contentW - 100, align: 'right' },
+          { text: fmtKwh(row.chgKwh), x: margin + contentW - 66,  align: 'right' },
+          { text: row.rate.toFixed(4), x: margin + contentW - 32,  align: 'right' },
+          { text: net.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true, color: (net >= 0 ? GREEN : RED) as readonly [number,number,number] },
+        ], i % 2 === 1);
+      });
 
-      totalRow('BESS ENERGY SAVING', `${fmtKwh(b.totalKwh)} kWh`, fmtR(b.totalSavings));
+      totalRow('DISCHARGE SAVING', `${fmtKwh(b.totalKwh)} kWh out`, fmtR(b.totalSavings));
+
+      // Charge cost row
+      doc.setFillColor(...BG_LIGHT);
+      doc.rect(margin, y, contentW, ROW_H, 'F');
+      doc.setDrawColor(...BORDER);
+      doc.line(margin, y + ROW_H, margin + contentW, y + ROW_H);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(...DARK);
+      doc.text('Charge Cost (grid energy consumed)', margin + 3, y + 4.1);
+      doc.setTextColor(...RED);
+      doc.text(`${fmtKwh(b.totalChargeKwh)} kWh in`, margin + contentW - 100, y + 4.1, { align: 'right' });
+      doc.text(`-${fmtR(b.totalChargeCost)}`, margin + contentW - 2, y + 4.1, { align: 'right' });
+      y += ROW_H;
+
+      // Net saving row
+      doc.setFillColor(220, 252, 231);
+      doc.rect(margin, y, contentW, TOT_H, 'F');
+      doc.setDrawColor(...GREEN);
+      doc.line(margin, y + TOT_H, margin + contentW, y + TOT_H);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...DARK);
+      doc.text('NET BESS SAVING (discharge − charge cost)', margin + 3, y + 4.8);
+      const netColor = b.netSavings >= 0 ? GREEN : RED;
+      doc.setTextColor(...netColor as [number,number,number]);
+      doc.text(fmtR(b.netSavings), margin + contentW - 2, y + 4.8, { align: 'right' });
+      y += TOT_H;
+
+      // Round-trip efficiency row
+      if (b.roundTripEfficiency != null) {
+        y += 2;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(...GREY);
+        const rtePct = (b.roundTripEfficiency * 100).toFixed(1);
+        doc.text(`Round-trip efficiency: ${fmtKwh(b.totalKwh)} kWh discharged ÷ ${fmtKwh(b.totalChargeKwh)} kWh charged = ${rtePct}%`, margin + 3, y + 3.5);
+        y += 6;
+      }
+
       y += 2;
     }
   }
