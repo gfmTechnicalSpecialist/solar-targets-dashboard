@@ -95,7 +95,7 @@ export function classifyTouPeriod(sastHour: number, dayOfWeek: number): TouPerio
 }
 
 export interface HourlyEnergyPoint {
-  /** UTC unix timestamp (end of the hour, as returned by the API) */
+  /** UTC unix timestamp (start of the hour, i.e. the reading row whose next row defines the delta) */
   timestamp: number;
   /** kWh consumed during this hour (delta between cumulative readings) */
   kwhDelta: number;
@@ -130,10 +130,9 @@ export function calculateTouCharges(
   for (const point of hourlyData) {
     if (point.kwhDelta <= 0) continue;
 
-    // Subtract 1 second so that an end-of-hour timestamp (e.g. 08:00) is
-    // treated as belonging to the hour it actually covers (07:00–08:00).
-    // Then shift into SAST to read hour-of-day and day-of-week correctly.
-    const sastDate = new Date((point.timestamp - 1) * 1000 + SAST_OFFSET_MS);
+    // Timestamp is the start of the hour (e.g. 07:00 covers 07:00–08:00).
+    // Shift into SAST to read hour-of-day and day-of-week correctly.
+    const sastDate = new Date(point.timestamp * 1000 + SAST_OFFSET_MS);
     const sastHour = sastDate.getUTCHours();
     const dayOfWeek = sastDate.getUTCDay();
 
@@ -264,10 +263,10 @@ export function cumulativeToHourlyDeltas(
   const sorted = [...raw].sort((a, b) => a[0] - b[0]);
 
   const result: HourlyEnergyPoint[] = [];
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = parseFloat(sorted[i - 1][2]) || 0;
+  for (let i = 0; i < sorted.length - 1; i++) {
     const curr = parseFloat(sorted[i][2])     || 0;
-    const delta = curr - prev;
+    const next = parseFloat(sorted[i + 1][2]) || 0;
+    const delta = next - curr;
     if (delta >= 0) {
       result.push({ timestamp: sorted[i][0], kwhDelta: Math.round(delta * 1000) / 1000 });
     }
