@@ -853,12 +853,13 @@ export async function fetchMonthlyBessEnergyDeltas(
 
   if (raw.length < 2) return [];
 
-  // Bin signed deltas into SAST-hour buckets (preserve sign — unlike grid/load which drop negatives)
+  // Bin signed deltas into SAST-hour buckets (preserve sign — unlike grid/load which drop negatives).
+  // Forward difference: delta[i] = B[i+1] - B[i], timestamped at row i (matches Excel C2 = B3 - B2).
   const hourlyBuckets = new Map<number, number>();
-  for (let i = 1; i < raw.length; i++) {
-    const prev = parseFloat(raw[i - 1][2]) || 0;
+  for (let i = 0; i < raw.length - 1; i++) {
     const curr = parseFloat(raw[i][2])     || 0;
-    const delta = curr - prev;
+    const next = parseFloat(raw[i + 1][2]) || 0;
+    const delta = next - curr;
     if (delta === 0) continue;
     const sastHourStartUtc = Math.floor((raw[i][0] + SAST_OFFSET_S) / 3600) * 3600 - SAST_OFFSET_S;
     hourlyBuckets.set(sastHourStartUtc, (hourlyBuckets.get(sastHourStartUtc) ?? 0) + delta);
