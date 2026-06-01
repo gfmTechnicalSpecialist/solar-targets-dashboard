@@ -96,7 +96,16 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     },
     gridEnergy: {
       idLog: 1999433,
-      items: [1999433139],
+      items: [1999433151],
+    },
+    loadEnergy: {
+      idLog: 1999433,
+      items: [1999433132],
+    },
+    demand: {
+      idLog: 2051937,
+      items: [2051937957],
+      period: '1800',
     },
   },
 };

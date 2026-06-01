@@ -15,7 +15,7 @@ import type { PowerFlowPoint } from '../api/higeco';
 import {
   calculateTouCharges,
   calculateDemandCharge,
-  DEFAULT_TOU_RATES,
+  getTouConfig,
   DEFAULT_DEMAND_RATE_PER_KVA,
   SERVICE_CHARGE_EXCL_VAT,
   SERVICE_CHARGE_INCL_VAT,
@@ -416,6 +416,9 @@ function generatePdf(data: ReportData) {
     hour: '2-digit', minute: '2-digit',
   });
 
+  // Site-specific TOU rates for displayed rate columns
+  const siteRates = getTouConfig(data.siteId).rates;
+
   // Colours
   const GREEN  = [16, 185, 129] as const;
   const RED    = [239, 68, 68] as const;
@@ -672,7 +675,7 @@ function generatePdf(data: ReportData) {
       halfRow(margin, halfW, [
         { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
         { text: fmtKwh(row.kwh), x: margin + halfW - 48, align: 'right' },
-        { text: DEFAULT_TOU_RATES[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: margin + halfW - 26, align: 'right' },
+        { text: siteRates[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: margin + halfW - 26, align: 'right' },
         { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
       ], i % 2 === 1);
       y += ROW_H;
@@ -712,7 +715,7 @@ function generatePdf(data: ReportData) {
       halfRow(col2X, halfW, [
         { text: row.label, x: col2X + 3, align: 'left', bold: true, color: row.color },
         { text: fmtKwh(row.kwh), x: col2X + halfW - 48, align: 'right' },
-        { text: DEFAULT_TOU_RATES[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: col2X + halfW - 26, align: 'right' },
+        { text: siteRates[row.label.toLowerCase().replace('-', '') as 'peak' | 'standard' | 'offpeak']?.toFixed(4) ?? '', x: col2X + halfW - 26, align: 'right' },
         { text: row.charge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
       ], i % 2 === 1);
       y += ROW_H;
@@ -757,9 +760,9 @@ function generatePdf(data: ReportData) {
     tableHeader(cols);
 
     [
-      { label: 'Energy — Peak',     kwh: data.included.peakKwh,     rate: DEFAULT_TOU_RATES.peak,     charge: data.included.peakCharge,     color: RED },
-      { label: 'Energy — Standard', kwh: data.included.standardKwh, rate: DEFAULT_TOU_RATES.standard, charge: data.included.standardCharge, color: AMBER },
-      { label: 'Energy — Off-Peak', kwh: data.included.offpeakKwh,  rate: DEFAULT_TOU_RATES.offpeak,  charge: data.included.offpeakCharge,  color: BLUE },
+      { label: 'Energy — Peak',     kwh: data.included.peakKwh,     rate: siteRates.peak,     charge: data.included.peakCharge,     color: RED },
+      { label: 'Energy — Standard', kwh: data.included.standardKwh, rate: siteRates.standard, charge: data.included.standardCharge, color: AMBER },
+      { label: 'Energy — Off-Peak', kwh: data.included.offpeakKwh,  rate: siteRates.offpeak,  charge: data.included.offpeakCharge,  color: BLUE },
     ].forEach((row, i) => tableRow([
       { text: row.label, x: margin + 3, align: 'left', bold: true, color: row.color },
       { text: fmtKwh(row.kwh), x: margin + contentW - 84, align: 'right' },
@@ -852,7 +855,7 @@ function generatePdf(data: ReportData) {
 
     // PV Generated row
     if (data.solarGenerationKwh > 0) {
-      const pvValueZar = r2(data.solarGenerationKwh * DEFAULT_TOU_RATES.standard);
+      const pvValueZar = r2(data.solarGenerationKwh * siteRates.standard);
       const pvCols = [
         { label: 'Description',  x: margin + 3,              align: 'left'  as const },
         { label: 'Value',        x: margin + contentW - 50,  align: 'right' as const },
@@ -996,8 +999,9 @@ const EnergyReportTab: React.FC = () => {
         fetchMonthlyIrradiance(user.token, year, month, site).catch(() => null),
       ]);
 
-      const included = calculateTouCharges(hourlyGrid);
-      const excluded = loadPoints ? calculateTouCharges(loadPoints) : null;
+      const touConfig = getTouConfig(site);
+      const included = calculateTouCharges(hourlyGrid, touConfig);
+      const excluded = loadPoints ? calculateTouCharges(loadPoints, touConfig) : null;
       const demand = peakKva != null ? calculateDemandCharge(peakKva) : null;
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10

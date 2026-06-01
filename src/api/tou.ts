@@ -22,7 +22,8 @@ export interface TouRates {
   offpeak: number;  // R/kWh
 }
 
-export const DEFAULT_TOU_RATES: TouRates = {
+/** Parc du Cap TOU rates — City of Cape Town 2025/26 MV TOU, low demand season. */
+export const PDC_TOU_RATES: TouRates = {
   peak: 3.3396,     // 333.96 c/kWh
   standard: 2.1708, // 217.08 c/kWh
   offpeak: 1.7563,  // 175.63 c/kWh
@@ -60,8 +61,15 @@ export function calculateDemandCharge(
 
 export type TouPeriod = 'peak' | 'standard' | 'offpeak';
 
+export type TouClassifier = (sastHour: number, dayOfWeek: number) => TouPeriod;
+
+export interface TouConfig {
+  rates: TouRates;
+  classify: TouClassifier;
+}
+
 /**
- * Classify an hour into a TOU period.
+ * Classify an hour into a TOU period for Parc du Cap (City of Cape Town MV TOU, low demand).
  * @param sastHour  - Hour of day in SAST (0–23)
  * @param dayOfWeek - JS day-of-week from a UTC date object where the date is already in SAST
  *                    (0 = Sunday … 6 = Saturday)
@@ -94,6 +102,56 @@ export function classifyTouPeriod(sastHour: number, dayOfWeek: number): TouPerio
   return 'offpeak';
 }
 
+/**
+ * Centurion high-demand-season TOU rates (R/kWh).
+ */
+export const CENTURION_TOU_RATES: TouRates = {
+  peak: 2.75,
+  standard: 1.70,
+  offpeak: 1.20,
+};
+
+/**
+ * Classify an hour into a TOU period for Centurion (high demand season schedule).
+ *
+ * Weekdays (Mon–Fri):
+ *   Peak    : 06:00–08:00 and 17:00–20:00
+ *   Standard: 08:00–17:00 and 20:00–22:00
+ *   Off-Peak: 22:00–06:00
+ *
+ * Saturday:
+ *   Standard: 07:00–12:00 and 17:00–19:00
+ *   Off-Peak: all other hours
+ *
+ * Sunday:
+ *   Off-Peak: all day
+ */
+export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
+  // Sunday — off-peak all day
+  if (dayOfWeek === 0) return 'offpeak';
+
+  // Saturday
+  if (dayOfWeek === 6) {
+    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 17 && sastHour < 19)) return 'standard';
+    return 'offpeak';
+  }
+
+  // Weekday
+  if ((sastHour >= 6 && sastHour < 8) || (sastHour >= 17 && sastHour < 20)) return 'peak';
+  if ((sastHour >= 8 && sastHour < 17) || (sastHour >= 20 && sastHour < 22)) return 'standard';
+  return 'offpeak';
+}
+
+/** Per-site TOU configuration (rates + period classifier). */
+export const TOU_CONFIG_BY_SITE = {
+  'parc-du-cap': { rates: PDC_TOU_RATES,       classify: classifyTouPeriod } satisfies TouConfig,
+  centurion:     { rates: CENTURION_TOU_RATES, classify: classifyCenturionTouPeriod } satisfies TouConfig,
+} as const;
+
+export function getTouConfig(siteId: keyof typeof TOU_CONFIG_BY_SITE): TouConfig {
+  return TOU_CONFIG_BY_SITE[siteId];
+}
+
 export interface HourlyEnergyPoint {
   /** UTC unix timestamp (start of the hour, i.e. the reading row whose next row defines the delta) */
   timestamp: number;
@@ -116,11 +174,13 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Given an array of hourly kWh deltas, classify each hour and calculate TOU charges.
+ * Defaults to the Parc du Cap (CoCT MV TOU) configuration to preserve existing behaviour.
  */
 export function calculateTouCharges(
   hourlyData: HourlyEnergyPoint[],
-  rates: TouRates = DEFAULT_TOU_RATES,
+  config: TouConfig = { rates: PDC_TOU_RATES, classify: classifyTouPeriod },
 ): TouBreakdown {
+  const { rates, classify } = config;
   let peakKwh = 0;
   let standardKwh = 0;
   let offpeakKwh = 0;
@@ -136,7 +196,7 @@ export function calculateTouCharges(
     const sastHour = sastDate.getUTCHours();
     const dayOfWeek = sastDate.getUTCDay();
 
-    const period = classifyTouPeriod(sastHour, dayOfWeek);
+    const period = classify(sastHour, dayOfWeek);
     if (period === 'peak')     peakKwh    += point.kwhDelta;
     else if (period === 'standard') standardKwh += point.kwhDelta;
     else                        offpeakKwh  += point.kwhDelta;
@@ -194,11 +254,11 @@ export interface BessTouSavings {
  * Net BESS saving = sum of discharge savings minus sum of charge costs.
  *
  * @param points  Hourly BESS energy points with signed kwhDelta.
- * @param rates   TOU energy rates to apply (default: DEFAULT_TOU_RATES).
+ * @param rates   TOU energy rates to apply (default: PDC_TOU_RATES).
  */
 export function calculateBessTouSavings(
   points: Array<{ timestamp: number; kwhDelta: number }>,
-  rates: TouRates = DEFAULT_TOU_RATES,
+  rates: TouRates = PDC_TOU_RATES,
 ): BessTouSavings {
   const SAST_OFFSET_MS = 2 * 3600 * 1000;
   let peakKwh = 0, standardKwh = 0, offpeakKwh = 0;
