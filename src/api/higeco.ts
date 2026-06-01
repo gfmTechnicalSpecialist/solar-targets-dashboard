@@ -43,6 +43,16 @@ interface SiteHigecoConfig {
     idLog: number;
     items: number[];
   };
+  /** Per-inverter cumulative active-energy meters (kWh, period=3600) for the PV plant */
+  inverters?: {
+    idLog: number;
+    /** Ordered list, parallel to `items`. Used as the row "Description". */
+    labels: string[];
+    /** Item IDs in the same order as `labels` */
+    items: number[];
+    /** Rated AC size (kW) per inverter, same order as `labels` */
+    sizesKw: number[];
+  };
 }
 
 const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
@@ -81,6 +91,12 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
     bessEnergy: {
       idLog: 1999098,
       items: [1999098134],
+    },
+    inverters: {
+      idLog: 1999098,
+      labels:  ['PV Inverter 1','PV Inverter 2','PV Inverter 3','PV Inverter 4','PV Inverter 5','PV Inverter 6','PV Inverter 7','PV Inverter 8'],
+      items:   [1999098124,    1999098125,    1999098126,    1999098127,    1999098128,    1999098129,    1999098130,    1999098131    ],
+      sizesKw: [100,            100,           100,           100,           100,           200,           200,           200          ],
     },
   },
   centurion: {
@@ -961,6 +977,94 @@ export async function fetchMonthlyIrradiance(
     if (w > 0) totalWhM2 += w * 0.5;
   }
   return Math.round(totalWhM2);
+}
+
+// ---------------------------------------------------------------------------
+// Per-inverter monthly energy fetch
+// ---------------------------------------------------------------------------
+
+export interface InverterMonthlyEnergy {
+  label: string;
+  sizeKw: number;
+  /** kWh produced in the requested month (last − first cumulative reading) */
+  energyKwh: number;
+}
+
+/**
+ * Fetch the monthly energy (kWh) produced by each inverter at a site.
+ * Returns an empty array if the site has no `inverters` configured.
+ */
+export async function fetchMonthlyInverterEnergy(
+  token: string,
+  year: number,
+  month: number, // 1–12
+  siteId: 'parc-du-cap' | 'centurion',
+): Promise<InverterMonthlyEnergy[]> {
+  const cfg = SITE_HIGECO[siteId];
+  if (!cfg.inverters) return [];
+
+  const SAST_OFFSET_S = 2 * 3600;
+  const startUtc = Math.floor(Date.UTC(year, month - 1, 1) / 1000) - SAST_OFFSET_S;
+  const stopUtc  = Math.floor(Date.UTC(year, month,     1) / 1000) - SAST_OFFSET_S - 1;
+
+  const { idLog, labels, items, sizesKw } = cfg.inverters;
+
+  const fetchOne = async (itemId: number): Promise<number> => {
+    const queryPayload = JSON.stringify([{
+      act: 'getDataLog',
+      idReq: 'graphsCall',
+      sn: cfg.sn,
+      DATI: {
+        idLog,
+        start: startUtc,
+        stop: stopUtc,
+        maxNumRecord: 100000,
+        period: '3600',
+        zeroTimeOffset: 0,
+        items: [itemId],
+      },
+    }]);
+
+    const body = new URLSearchParams();
+    body.set('query', queryPayload);
+
+    const res = await fetch(EQUIPMENT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Higeco-Token': token,
+      },
+      body: body.toString(),
+    });
+
+    if (!res.ok) throw new Error(`Equipment request failed: ${res.status}`);
+
+    const json = await res.json();
+
+    if (isSessionExpiredResponse(json)) {
+      notifySessionExpired();
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+
+    const outer = json?.DATI?.[0]?.DATI;
+    if (!outer?.dati) return 0;
+
+    const raw: [number, number, string][] = outer.dati;
+    if (raw.length < 2) return 0;
+
+    raw.sort((a, b) => a[0] - b[0]);
+    const first = parseFloat(raw[0][2])              || 0;
+    const last  = parseFloat(raw[raw.length - 1][2]) || 0;
+    return Math.max(0, last - first);
+  };
+
+  const energies = await Promise.all(items.map(fetchOne));
+  return labels.map((label, i) => ({
+    label,
+    sizeKw: sizesKw[i],
+    energyKwh: Math.round(energies[i] * 10) / 10,
+  }));
 }
 
 // ---------------------------------------------------------------------------
