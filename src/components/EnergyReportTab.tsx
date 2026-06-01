@@ -609,51 +609,27 @@ function generatePdf(data: ReportData) {
       target: number,
       pct: number | null,
     ) => {
-      const ROW_H = 14;
-      // Card background
       doc.setFillColor(...BG_LIGHT);
       doc.setDrawColor(...BORDER);
-      doc.roundedRect(margin, y, contentW, ROW_H, 1.5, 1.5, 'FD');
-
-      // Title (top-left)
+      doc.roundedRect(margin, y, contentW, 7, 1.5, 1.5, 'FD');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(...DARK);
-      doc.text(title, margin + 4, y + 4.2);
-
-      // Percentage (top-right, colour-coded)
-      const pctColor: [number, number, number] = pct == null
-        ? [...GREY]
-        : (pct >= 95 ? [...GREEN] : pct >= 80 ? [...AMBER] : [...RED]);
-      if (pct != null) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(...pctColor);
-        doc.text(`${pct.toFixed(1)}% of target`, pageW - margin - 4, y + 4.2, { align: 'right' });
-      }
-
-      // Progress bar track
-      const barX = margin + 4;
-      const barY = y + 6.2;
-      const barW = contentW - 8;
-      const barH = 3.2;
-      doc.setFillColor(229, 231, 235); // gray-200
-      doc.setDrawColor(229, 231, 235);
-      doc.roundedRect(barX, barY, barW, barH, 1, 1, 'F');
-      if (pct != null && pct > 0) {
-        const fillW = Math.min(barW, (Math.min(pct, 100) / 100) * barW);
-        doc.setFillColor(...pctColor);
-        doc.roundedRect(barX, barY, fillW, barH, 1, 1, 'F');
-      }
-
-      // Actual / Target text below bar
+      doc.text(title, margin + 4, y + 4.6);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.setTextColor(...GREY);
-      doc.text(`${fmtKwh(actual)} kWh`, barX, y + ROW_H - 2);
-      doc.text(`/ ${fmtKwh(target)} kWh target`, barX + barW, y + ROW_H - 2, { align: 'right' });
-
-      y += ROW_H + 2;
+      const detail = `Actual: ${fmtKwh(actual)} kWh   Target: ${fmtKwh(target)} kWh`;
+      const detailX = pct != null ? pageW - margin - 36 : pageW - margin - 4;
+      doc.text(detail, detailX, y + 4.6, { align: 'right' });
+      if (pct != null) {
+        const pctColor = (pct >= 95 ? GREEN : pct >= 80 ? AMBER : RED) as [number, number, number];
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(...pctColor);
+        doc.text(`${pct.toFixed(1)}% of target`, pageW - margin - 4, y + 4.7, { align: 'right' });
+      }
+      y += 9;
     };
 
     renderTargetRow(
