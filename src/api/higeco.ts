@@ -131,6 +131,21 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
       idLog: 1999433,
       items: [1999433126],
     },
+    inverters: {
+      idLog: 1999433,
+      labels: [
+        'PV Inverter 1','PV Inverter 2','PV Inverter 3','PV Inverter 4',
+        'PV Inverter 5','PV Inverter 6','PV Inverter 7','PV Inverter 8',
+        'PV Inverter 9','PV Inverter 10','PV Inverter 11','PV Inverter 12',
+      ],
+      items: [
+        1999433133, 1999433134, 1999433135, 1999433136,
+        1999433137, 1999433138, 1999433139, 1999433140,
+        1999433141, 1999433142, 1999433143, 1999433144,
+      ],
+      // Default 100 kW per inverter — update if site nameplate values differ
+      sizesKw: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+    },
   },
 };
 
