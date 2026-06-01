@@ -1045,13 +1045,13 @@ function generatePdf(data: ReportData) {
     const prevMonthLabel = monthLabel(data.prevMonthKey);
 
     const colXs = [
-      margin + 3,                       // Description
-      margin + contentW - 158,          // Size (kW)
-      margin + contentW - 125,          // Cur Yield (kWh)
-      margin + contentW -  95,          // Cur kWh/kW
-      margin + contentW -  62,          // Prev Yield (kWh)
-      margin + contentW -  32,          // Prev kWh/kW
-      margin + contentW -   2,          // Difference
+      margin + 3,                       // Description (left-aligned)
+      margin + 55,                      // Size (kW)        (right-aligned)
+      margin + 95,                      // Cur Yield (kWh)  (right-aligned)
+      margin + 120,                     // Cur kWh/kW
+      margin + 150,                     // Prev Yield (kWh)
+      margin + 172,                     // Prev kWh/kW
+      margin + contentW - 2,            // Difference
     ];
 
     const headerCols = [
