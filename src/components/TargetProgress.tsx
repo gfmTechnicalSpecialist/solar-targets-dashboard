@@ -69,7 +69,6 @@ const TargetProgress: React.FC = () => {
   const [data, setData] = useState<DailyProductionPoint[]>([]);
   const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const startDate = dateWindow.startDate;
   const endDate   = dateWindow.endDate;
@@ -113,7 +112,6 @@ const TargetProgress: React.FC = () => {
       }
       setData(result);
       setIrradianceRaw(irrResult ?? []);
-      setHasLoadedOnce(true);
     } catch {
       // silently fail — cards will show 0 production
     } finally {
