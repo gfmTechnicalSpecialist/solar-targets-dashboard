@@ -28,8 +28,9 @@ const TargetProgress: React.FC = () => {
   const activeSite: 'parc-du-cap' | 'centurion' =
     siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
 
-  const now = new Date();
-  const currentMonthKey = monthKey(now.getFullYear(), now.getMonth());
+  const now = useMemo(() => new Date(), []);
+  const currentMonthKey = useMemo(() => monthKey(now.getFullYear(), now.getMonth()), [now]);
+  const todayDay = useMemo(() => now.getDate(), [now]);
 
   // Selectable months: from earliest target key (across sites) up to current month
   const monthOptions = useMemo<string[]>(() => {
@@ -60,10 +61,10 @@ const TargetProgress: React.FC = () => {
     const [sy, sm] = selectedMonth.split('-').map(Number);
     const lastDayOfSel = new Date(sy, sm, 0).getDate();
     const endIsCurrent = selectedMonth === currentMonthKey;
-    const endDay = endIsCurrent ? now.getDate() : lastDayOfSel;
+    const endDay = endIsCurrent ? todayDay : lastDayOfSel;
     const endDate = `${sy}-${pad2(sm)}-${pad2(endDay)}`;
     return { startDate, endDate };
-  }, [prevMonth, selectedMonth, currentMonthKey, now]);
+  }, [prevMonth, selectedMonth, currentMonthKey, todayDay]);
 
   const [data, setData] = useState<DailyProductionPoint[]>([]);
   const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
@@ -147,7 +148,7 @@ const TargetProgress: React.FC = () => {
   const [selY, selM] = selectedMonth.split('-').map(Number);
   const daysInSelectedMonth = new Date(selY, selM, 0).getDate();
   const isCurrentMonth = selectedMonth === currentMonthKey;
-  const dayOfMonth = isCurrentMonth ? now.getDate() : daysInSelectedMonth;
+  const dayOfMonth = isCurrentMonth ? todayDay : daysInSelectedMonth;
 
   // Previous month progress
   const [prevY, prevM] = prevMonth.split('-').map(Number);
