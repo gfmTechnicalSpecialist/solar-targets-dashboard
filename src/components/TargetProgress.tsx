@@ -69,19 +69,24 @@ const TargetProgress: React.FC = () => {
   const [data, setData] = useState<DailyProductionPoint[]>([]);
   const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  const startDate = dateWindow.startDate;
+  const endDate   = dateWindow.endDate;
 
   const loadData = useCallback(async () => {
     if (!user?.token) return;
     setLoading(true);
     try {
+      const window = { startDate, endDate };
       let result: DailyProductionPoint[];
       let irrResult: DailyIrradiancePoint[] | null = null;
       if (siteId === 'all') {
         const [pdc, cen, irrPdc, irrCen] = await Promise.all([
-          fetchDailyProduction(user.token, 0, 'parc-du-cap', dateWindow),
-          fetchDailyProduction(user.token, 0, 'centurion', dateWindow),
-          fetchDailyIrradiance(user.token, 0, 'parc-du-cap', dateWindow),
-          fetchDailyIrradiance(user.token, 0, 'centurion', dateWindow),
+          fetchDailyProduction(user.token, 0, 'parc-du-cap', window),
+          fetchDailyProduction(user.token, 0, 'centurion', window),
+          fetchDailyIrradiance(user.token, 0, 'parc-du-cap', window),
+          fetchDailyIrradiance(user.token, 0, 'centurion', window),
         ]);
         result = pdc.map((p, i) => ({
           date: p.date,
@@ -100,20 +105,21 @@ const TargetProgress: React.FC = () => {
         }
       } else {
         const [prod, irr] = await Promise.all([
-          fetchDailyProduction(user.token, 0, activeSite, dateWindow),
-          fetchDailyIrradiance(user.token, 0, activeSite, dateWindow),
+          fetchDailyProduction(user.token, 0, activeSite, window),
+          fetchDailyIrradiance(user.token, 0, activeSite, window),
         ]);
         result = prod;
         irrResult = irr;
       }
       setData(result);
       setIrradianceRaw(irrResult ?? []);
+      setHasLoadedOnce(true);
     } catch {
       // silently fail — cards will show 0 production
     } finally {
       setLoading(false);
     }
-  }, [user?.token, dateWindow, siteId, activeSite]);
+  }, [user?.token, startDate, endDate, siteId, activeSite]);
 
   useEffect(() => {
     loadData();
@@ -197,7 +203,7 @@ const TargetProgress: React.FC = () => {
 
       {/* 4 cards grid */}
       <div className="tp-grid" style={{ position: 'relative' }}>
-        {loading && (
+        {loading && !hasLoadedOnce && (
           <div className="chart-loading-overlay">
             <div className="chart-loading-inner">
               <Loader2 size={28} className="spinner" />
