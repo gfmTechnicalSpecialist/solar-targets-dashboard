@@ -623,8 +623,8 @@ function generatePdf(data: ReportData) {
 
       // Percentage (top-right, colour-coded)
       const pctColor: [number, number, number] = pct == null
-        ? GREY
-        : (pct >= 95 ? GREEN : pct >= 80 ? AMBER : RED);
+        ? [...GREY]
+        : (pct >= 95 ? [...GREEN] : pct >= 80 ? [...AMBER] : [...RED]);
       if (pct != null) {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
