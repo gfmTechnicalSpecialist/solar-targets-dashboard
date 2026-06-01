@@ -4,7 +4,7 @@ import { monthlyTariffData } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchMonthlyGridEnergyHourly, fetchMonthlyLoadEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
-import { calculateTouCharges, calculateDemandCharge, getTouConfig, PDC_TOU_RATES, SERVICE_CHARGE_EXCL_VAT } from '../api/tou';
+import { calculateTouCharges, calculateDemandCharge, getTouConfig, PDC_TOU_RATES, PDC_DEMAND_RATE_PER_KVA, SERVICE_CHARGE_EXCL_VAT } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown, TouRates } from '../api/tou';
 
 const CURRENT_MONTH_KEY = '2026-05';
@@ -23,7 +23,7 @@ const SetupPlaceholder: React.FC = () => (
 
 interface TouRow { label: string; kwh: number; rate: number; charge: number; color: string; }
 
-const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null; energyOnly?: boolean; rates?: TouRates }> = ({ breakdown, demand, energyOnly, rates = PDC_TOU_RATES }) => {
+const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null; energyOnly?: boolean; rates?: TouRates; demandRatePerKva?: number }> = ({ breakdown, demand, energyOnly, rates = PDC_TOU_RATES, demandRatePerKva = PDC_DEMAND_RATE_PER_KVA }) => {
   const rows: TouRow[] = [
     { label: 'Energy — Peak',     kwh: breakdown.peakKwh,     rate: rates.peak,     charge: breakdown.peakCharge,     color: 'var(--danger)' },
     { label: 'Energy — Standard', kwh: breakdown.standardKwh, rate: rates.standard, charge: breakdown.standardCharge, color: 'var(--warning)' },
@@ -59,7 +59,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
               {demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA
             </td>
-            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>93.3600</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{demandRatePerKva.toFixed(4)}</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
               {demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
@@ -258,7 +258,7 @@ const TariffStatsCard: React.FC = () => {
         const touConfig = getTouConfig(siteArg);
         setLiveBreakdown(calculateTouCharges(hourlyPoints, touConfig));
         if (peakKva != null) {
-          setDemandBreakdown(calculateDemandCharge(peakKva));
+          setDemandBreakdown(calculateDemandCharge(peakKva, touConfig.demandRatePerKva));
         }
         if (loadPoints != null) {
           setExcludedBreakdown(calculateTouCharges(loadPoints, touConfig));
@@ -335,7 +335,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : liveBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} demandRatePerKva={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').demandRatePerKva : PDC_DEMAND_RATE_PER_KVA} /></div>
             ) : !loading ? (
               <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
             ) : null}
@@ -351,7 +351,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : excludedBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} demandRatePerKva={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').demandRatePerKva : PDC_DEMAND_RATE_PER_KVA} /></div>
             ) : !loading ? (
               <SetupPlaceholder />
             ) : null}

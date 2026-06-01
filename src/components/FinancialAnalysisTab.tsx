@@ -8,7 +8,7 @@ import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
 import {
   PDC_TOU_RATES,
-  DEFAULT_DEMAND_RATE_PER_KVA,
+  PDC_DEMAND_RATE_PER_KVA,
   SERVICE_CHARGE_EXCL_VAT,
 } from '../api/tou';
 
@@ -65,7 +65,7 @@ const FinancialAnalysisTab: React.FC = () => {
                       { label: 'Peak energy', value: `R ${PDC_TOU_RATES.peak.toFixed(4)} / kWh`, color: 'var(--danger)' },
                       { label: 'Standard energy', value: `R ${PDC_TOU_RATES.standard.toFixed(4)} / kWh`, color: 'var(--warning)' },
                       { label: 'Off-peak energy', value: `R ${PDC_TOU_RATES.offpeak.toFixed(4)} / kWh`, color: 'var(--info)' },
-                      { label: 'Demand', value: `R ${DEFAULT_DEMAND_RATE_PER_KVA.toFixed(2)} / kVA`, color: 'var(--text-primary)' },
+                      { label: 'Demand', value: `R ${PDC_DEMAND_RATE_PER_KVA.toFixed(2)} / kVA`, color: 'var(--text-primary)' },
                       { label: 'Service charge', value: `R ${SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
                     ].map(({ label, value, color }) => (
                       <tr key={label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>

@@ -29,8 +29,11 @@ export const PDC_TOU_RATES: TouRates = {
   offpeak: 1.7563,  // 175.63 c/kWh
 };
 
-/** Monthly CoCT MV TOU demand charge rate (R/kVA) — 2025/26 Low Demand season: R75.89 energy demand + R17.47 network capacity */
-export const DEFAULT_DEMAND_RATE_PER_KVA = 93.36;
+/** Monthly CoCT MV TOU demand charge rate for Parc du Cap (R/kVA) — 2025/26 Low Demand season: R75.89 energy demand + R17.47 network capacity */
+export const PDC_DEMAND_RATE_PER_KVA = 93.36;
+
+/** Monthly demand charge rate for Centurion (R/kVA). */
+export const CENTURION_DEMAND_RATE_PER_KVA = 358.03;
 
 /**
  * CoCT 2025/26 MV TOU fixed monthly service charge.
@@ -51,7 +54,7 @@ export interface DemandBreakdown {
 /** Calculate the monthly demand charge from a peak kVA reading. */
 export function calculateDemandCharge(
   peakKva: number,
-  ratePerKva: number = DEFAULT_DEMAND_RATE_PER_KVA,
+  ratePerKva: number = PDC_DEMAND_RATE_PER_KVA,
 ): DemandBreakdown {
   return {
     peakKva,
@@ -66,6 +69,7 @@ export type TouClassifier = (sastHour: number, dayOfWeek: number) => TouPeriod;
 export interface TouConfig {
   rates: TouRates;
   classify: TouClassifier;
+  demandRatePerKva: number;
 }
 
 /**
@@ -142,10 +146,10 @@ export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number):
   return 'offpeak';
 }
 
-/** Per-site TOU configuration (rates + period classifier). */
+/** Per-site TOU configuration (rates + period classifier + demand rate). */
 export const TOU_CONFIG_BY_SITE = {
-  'parc-du-cap': { rates: PDC_TOU_RATES,       classify: classifyTouPeriod } satisfies TouConfig,
-  centurion:     { rates: CENTURION_TOU_RATES, classify: classifyCenturionTouPeriod } satisfies TouConfig,
+  'parc-du-cap': { rates: PDC_TOU_RATES,       classify: classifyTouPeriod,          demandRatePerKva: PDC_DEMAND_RATE_PER_KVA }       satisfies TouConfig,
+  centurion:     { rates: CENTURION_TOU_RATES, classify: classifyCenturionTouPeriod, demandRatePerKva: CENTURION_DEMAND_RATE_PER_KVA } satisfies TouConfig,
 } as const;
 
 export function getTouConfig(siteId: keyof typeof TOU_CONFIG_BY_SITE): TouConfig {
@@ -178,7 +182,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  */
 export function calculateTouCharges(
   hourlyData: HourlyEnergyPoint[],
-  config: TouConfig = { rates: PDC_TOU_RATES, classify: classifyTouPeriod },
+  config: TouConfig = { rates: PDC_TOU_RATES, classify: classifyTouPeriod, demandRatePerKva: PDC_DEMAND_RATE_PER_KVA },
 ): TouBreakdown {
   const { rates, classify } = config;
   let peakKwh = 0;

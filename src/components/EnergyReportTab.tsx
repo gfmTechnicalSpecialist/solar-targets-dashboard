@@ -16,7 +16,6 @@ import {
   calculateTouCharges,
   calculateDemandCharge,
   getTouConfig,
-  DEFAULT_DEMAND_RATE_PER_KVA,
   SERVICE_CHARGE_EXCL_VAT,
   SERVICE_CHARGE_INCL_VAT,
 } from '../api/tou';
@@ -418,6 +417,7 @@ function generatePdf(data: ReportData) {
 
   // Site-specific TOU rates for displayed rate columns
   const siteRates = getTouConfig(data.siteId).rates;
+  const siteDemandRate = getTouConfig(data.siteId).demandRatePerKva;
 
   // Colours
   const GREEN  = [16, 185, 129] as const;
@@ -684,7 +684,7 @@ function generatePdf(data: ReportData) {
       halfRow(margin, halfW, [
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
         { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + halfW - 48, align: 'right' },
-        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(2), x: margin + halfW - 26, align: 'right' },
+        { text: siteDemandRate.toFixed(2), x: margin + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
       ], false);
       y += ROW_H;
@@ -724,7 +724,7 @@ function generatePdf(data: ReportData) {
       halfRow(col2X, halfW, [
         { text: 'Demand', x: col2X + 3, align: 'left', bold: true },
         { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: col2X + halfW - 48, align: 'right' },
-        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(2), x: col2X + halfW - 26, align: 'right' },
+        { text: siteDemandRate.toFixed(2), x: col2X + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
       ], false);
       y += ROW_H;
@@ -774,7 +774,7 @@ function generatePdf(data: ReportData) {
       tableRow([
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
         { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + contentW - 84, align: 'right' },
-        { text: DEFAULT_DEMAND_RATE_PER_KVA.toFixed(4), x: margin + contentW - 52, align: 'right' },
+        { text: siteDemandRate.toFixed(4), x: margin + contentW - 52, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
       ], false);
     }
@@ -1002,7 +1002,7 @@ const EnergyReportTab: React.FC = () => {
       const touConfig = getTouConfig(site);
       const included = calculateTouCharges(hourlyGrid, touConfig);
       const excluded = loadPoints ? calculateTouCharges(loadPoints, touConfig) : null;
-      const demand = peakKva != null ? calculateDemandCharge(peakKva) : null;
+      const demand = peakKva != null ? calculateDemandCharge(peakKva, getTouConfig(site).demandRatePerKva) : null;
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
         : 0;
