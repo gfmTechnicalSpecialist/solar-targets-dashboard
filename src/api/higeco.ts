@@ -144,7 +144,7 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
         1999433141, 1999433142, 1999433143, 1999433144,
       ],
       // Default 100 kW per inverter — update if site nameplate values differ
-      sizesKw: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+      sizesKw: [330, 330, 200, 330, 330, 200, 330, 330, 200, 330, 330, 200],
     },
   },
 };
