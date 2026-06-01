@@ -157,11 +157,11 @@ function drawPowerFlowCharts(
   const results: WeekChartResult[] = [];
 
   // ── Shared Y-axis range across all weekly charts (consistent comparison) ──
-  // Use a 100-kW step so labels stay round; include 0 as a hard floor/ceiling.
-  const Y_STEP = 100;
+  // Use a 500-kW step so labels stay round; include 0 as a hard floor/ceiling.
+  const Y_STEP = 500;
   const globalVals = points.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw, p.gridKva]);
   const globalYMin = Math.floor(Math.min(0,   ...globalVals) / Y_STEP) * Y_STEP;
-  const globalYMax = Math.ceil (Math.max(100, ...globalVals) / Y_STEP) * Y_STEP;
+  const globalYMax = Math.ceil (Math.max(Y_STEP, ...globalVals) / Y_STEP) * Y_STEP;
 
   weeks.forEach(([weekKey, weekPoints], wi) => {
     const [wy, wm, wd] = weekKey.split('-').map(Number);
@@ -252,10 +252,10 @@ function drawPowerFlowCharts(
     ctx.lineWidth   = 1;
     ctx.strokeRect(PAD_L, chartTop, chartW, PANEL_H);
 
-    // Horizontal grid lines + Y axis labels
-    const yTicks = 6;
+    // Horizontal grid lines + Y axis labels — one tick per Y_STEP (500 kW)
+    const yTicks = Math.round(yRange / Y_STEP);
     for (let i = 0; i <= yTicks; i++) {
-      const val = yMin + (i / yTicks) * yRange;
+      const val = yMin + i * Y_STEP;
       const py  = toY(val);
       ctx.strokeStyle = val === 0 ? '#9ca3af' : '#e5e7eb';
       ctx.lineWidth   = val === 0 ? 1.5 : 0.8;
@@ -611,23 +611,25 @@ function generatePdf(data: ReportData) {
     ) => {
       doc.setFillColor(...BG_LIGHT);
       doc.setDrawColor(...BORDER);
-      doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'FD');
+      doc.roundedRect(margin, y, contentW, 7, 1.5, 1.5, 'FD');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(...DARK);
-      doc.text(title, margin + 4, y + 4.5);
+      doc.text(title, margin + 4, y + 4.6);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.setTextColor(...GREY);
-      doc.text(`Actual: ${fmtKwh(actual)} kWh   Target: ${fmtKwh(target)} kWh`, margin + 4, y + 8.2);
+      const detail = `Actual: ${fmtKwh(actual)} kWh   Target: ${fmtKwh(target)} kWh`;
+      const detailX = pct != null ? pageW - margin - 36 : pageW - margin - 4;
+      doc.text(detail, detailX, y + 4.6, { align: 'right' });
       if (pct != null) {
         const pctColor = (pct >= 95 ? GREEN : pct >= 80 ? AMBER : RED) as [number, number, number];
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setTextColor(...pctColor);
-        doc.text(`${pct.toFixed(1)}% of target`, pageW - margin - 4, y + 6.5, { align: 'right' });
+        doc.text(`${pct.toFixed(1)}% of target`, pageW - margin - 4, y + 4.7, { align: 'right' });
       }
-      y += 12;
+      y += 9;
     };
 
     renderTargetRow(
