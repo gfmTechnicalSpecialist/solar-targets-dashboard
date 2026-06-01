@@ -909,92 +909,6 @@ function generatePdf(data: ReportData) {
     y += 18;
   }
 
-  // ── SECTION: Inverter Energy ──────────────────────────────────────────────
-  if (data.inverters.length > 0) {
-    section('Inverter Energy');
-
-    const curMonthLabel  = monthLabel(data.monthKey);
-    const prevMonthLabel = monthLabel(data.prevMonthKey);
-
-    // 7 columns: Description | Size (kW) | Cur Yield (kWh) | Cur kWh/kW | Prev Yield (kWh) | Prev kWh/kW | Difference
-    const colXs = [
-      margin + 3,                       // Description
-      margin + contentW - 158,          // Size (kW)
-      margin + contentW - 125,          // Cur Yield (kWh)
-      margin + contentW -  95,          // Cur kWh/kW
-      margin + contentW -  62,          // Prev Yield (kWh)
-      margin + contentW -  32,          // Prev kWh/kW
-      margin + contentW -   2,          // Difference
-    ];
-
-    // Sub-header band for the two month groupings (kept simple — just column titles)
-    const headerCols = [
-      { label: 'Description',           x: colXs[0], align: 'left'  as const },
-      { label: 'Size (kW)',             x: colXs[1], align: 'right' as const },
-      { label: `${curMonthLabel} kWh`,  x: colXs[2], align: 'right' as const },
-      { label: 'kWh/kW',                x: colXs[3], align: 'right' as const },
-      { label: `${prevMonthLabel} kWh`, x: colXs[4], align: 'right' as const },
-      { label: 'kWh/kW',                x: colXs[5], align: 'right' as const },
-      { label: 'Difference',            x: colXs[6], align: 'right' as const },
-    ];
-    tableHeader(headerCols);
-
-    let totalSize = 0;
-    let totalCur  = 0;
-    let totalPrev = 0;
-
-    data.inverters.forEach((inv, idx) => {
-      const prev    = data.prevInverters.find(p => p.label === inv.label) ?? null;
-      const curYpkw = inv.sizeKw > 0 ? inv.energyKwh / inv.sizeKw : 0;
-      const prevYpkw = prev && prev.sizeKw > 0 ? prev.energyKwh / prev.sizeKw : 0;
-      const diffPct = prev && prev.energyKwh > 0
-        ? ((inv.energyKwh - prev.energyKwh) / prev.energyKwh) * 100
-        : null;
-      const diffColor: readonly [number, number, number] = diffPct == null
-        ? GREY
-        : (diffPct >= 0 ? GREEN : diffPct >= -5 ? AMBER : RED);
-
-      totalSize += inv.sizeKw;
-      totalCur  += inv.energyKwh;
-      totalPrev += prev?.energyKwh ?? 0;
-
-      tableRow([
-        { text: inv.label,                                        x: colXs[0], align: 'left',  bold: true },
-        { text: inv.sizeKw.toLocaleString(),                      x: colXs[1], align: 'right' },
-        { text: fmtKwh(inv.energyKwh),                            x: colXs[2], align: 'right' },
-        { text: Math.round(curYpkw).toString(),                   x: colXs[3], align: 'right' },
-        { text: prev ? fmtKwh(prev.energyKwh) : '—',              x: colXs[4], align: 'right' },
-        { text: prev ? Math.round(prevYpkw).toString() : '—',     x: colXs[5], align: 'right' },
-        { text: diffPct == null ? '—' : `${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(0)}%`,
-          x: colXs[6], align: 'right', bold: true, color: diffColor },
-      ], idx % 2 === 1);
-    });
-
-    // Total row
-    const totalCurYpkw  = totalSize > 0 ? totalCur  / totalSize : 0;
-    const totalPrevYpkw = totalSize > 0 ? totalPrev / totalSize : 0;
-    const totalDiffPct  = totalPrev > 0 ? ((totalCur - totalPrev) / totalPrev) * 100 : null;
-    const totalDiffColor: readonly [number, number, number] = totalDiffPct == null
-      ? GREY
-      : (totalDiffPct >= 0 ? GREEN : totalDiffPct >= -5 ? AMBER : RED);
-
-    doc.setFillColor(...DARK);
-    doc.rect(margin, y, contentW, TOT_H, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('TOTAL',                                  colXs[0], y + 4.6, { align: 'left'  });
-    doc.text(totalSize.toLocaleString(),               colXs[1], y + 4.6, { align: 'right' });
-    doc.text(fmtKwh(totalCur),                         colXs[2], y + 4.6, { align: 'right' });
-    doc.text(Math.round(totalCurYpkw).toString(),      colXs[3], y + 4.6, { align: 'right' });
-    doc.text(fmtKwh(totalPrev),                        colXs[4], y + 4.6, { align: 'right' });
-    doc.text(Math.round(totalPrevYpkw).toString(),     colXs[5], y + 4.6, { align: 'right' });
-    doc.setTextColor(...totalDiffColor);
-    doc.text(totalDiffPct == null ? '—' : `${totalDiffPct >= 0 ? '+' : ''}${totalDiffPct.toFixed(0)}%`,
-      colXs[6], y + 4.6, { align: 'right' });
-    y += TOT_H + 3;
-  }
-
   // ── SECTION: PV Summary ───────────────────────────────────────────────────
   const hasPvSummary = data.solarGenerationKwh > 0 || data.measuredGhiWhM2 != null;
   if (hasPvSummary) {
@@ -1096,6 +1010,114 @@ function generatePdf(data: ReportData) {
       const imgY    = 26 + slotIdx * (imgH + GAP_MM);
       doc.addImage(chart.dataUrl, 'PNG', margin, imgY, imgW, imgH);
     }
+  }
+
+  // ── INVERTER ENERGY PAGE (after Power Flow charts) ────────────────────────
+  if (data.inverters.length > 0) {
+    doc.addPage();
+
+    // Header bar
+    doc.setFillColor(...DARK);
+    doc.rect(0, 0, pageW, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('INVERTER ENERGY', pageW - margin, 9, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(`${label}  |  ${data.siteLabel}`, pageW - margin, 14, { align: 'right' });
+
+    // Footer
+    doc.setDrawColor(...BORDER);
+    doc.line(margin, 297 - 12, pageW - margin, 297 - 12);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...GREY);
+    doc.text('Per-inverter monthly active energy. Cumulative meter delta (last − first).', margin, 297 - 7.5);
+    doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, 297 - 7.5, { align: 'right' });
+
+    // Reset y to start of content area on this fresh page
+    y = 28;
+
+    section('Inverter Energy');
+
+    const curMonthLabel  = monthLabel(data.monthKey);
+    const prevMonthLabel = monthLabel(data.prevMonthKey);
+
+    const colXs = [
+      margin + 3,                       // Description
+      margin + contentW - 158,          // Size (kW)
+      margin + contentW - 125,          // Cur Yield (kWh)
+      margin + contentW -  95,          // Cur kWh/kW
+      margin + contentW -  62,          // Prev Yield (kWh)
+      margin + contentW -  32,          // Prev kWh/kW
+      margin + contentW -   2,          // Difference
+    ];
+
+    const headerCols = [
+      { label: 'Description',           x: colXs[0], align: 'left'  as const },
+      { label: 'Size (kW)',             x: colXs[1], align: 'right' as const },
+      { label: `${curMonthLabel} kWh`,  x: colXs[2], align: 'right' as const },
+      { label: 'kWh/kW',                x: colXs[3], align: 'right' as const },
+      { label: `${prevMonthLabel} kWh`, x: colXs[4], align: 'right' as const },
+      { label: 'kWh/kW',                x: colXs[5], align: 'right' as const },
+      { label: 'Difference',            x: colXs[6], align: 'right' as const },
+    ];
+    tableHeader(headerCols);
+
+    let totalSize = 0;
+    let totalCur  = 0;
+    let totalPrev = 0;
+
+    data.inverters.forEach((inv, idx) => {
+      const prev    = data.prevInverters.find(p => p.label === inv.label) ?? null;
+      const curYpkw = inv.sizeKw > 0 ? inv.energyKwh / inv.sizeKw : 0;
+      const prevYpkw = prev && prev.sizeKw > 0 ? prev.energyKwh / prev.sizeKw : 0;
+      const diffPct = prev && prev.energyKwh > 0
+        ? ((inv.energyKwh - prev.energyKwh) / prev.energyKwh) * 100
+        : null;
+      const diffColor: readonly [number, number, number] = diffPct == null
+        ? GREY
+        : (diffPct >= 0 ? GREEN : diffPct >= -5 ? AMBER : RED);
+
+      totalSize += inv.sizeKw;
+      totalCur  += inv.energyKwh;
+      totalPrev += prev?.energyKwh ?? 0;
+
+      tableRow([
+        { text: inv.label,                                        x: colXs[0], align: 'left',  bold: true },
+        { text: inv.sizeKw.toLocaleString(),                      x: colXs[1], align: 'right' },
+        { text: fmtKwh(inv.energyKwh),                            x: colXs[2], align: 'right' },
+        { text: Math.round(curYpkw).toString(),                   x: colXs[3], align: 'right' },
+        { text: prev ? fmtKwh(prev.energyKwh) : '—',              x: colXs[4], align: 'right' },
+        { text: prev ? Math.round(prevYpkw).toString() : '—',     x: colXs[5], align: 'right' },
+        { text: diffPct == null ? '—' : `${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(0)}%`,
+          x: colXs[6], align: 'right', bold: true, color: diffColor },
+      ], idx % 2 === 1);
+    });
+
+    const totalCurYpkw  = totalSize > 0 ? totalCur  / totalSize : 0;
+    const totalPrevYpkw = totalSize > 0 ? totalPrev / totalSize : 0;
+    const totalDiffPct  = totalPrev > 0 ? ((totalCur - totalPrev) / totalPrev) * 100 : null;
+    const totalDiffColor: readonly [number, number, number] = totalDiffPct == null
+      ? GREY
+      : (totalDiffPct >= 0 ? GREEN : totalDiffPct >= -5 ? AMBER : RED);
+
+    doc.setFillColor(...DARK);
+    doc.rect(margin, y, contentW, TOT_H, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text('TOTAL',                                  colXs[0], y + 4.6, { align: 'left'  });
+    doc.text(totalSize.toLocaleString(),               colXs[1], y + 4.6, { align: 'right' });
+    doc.text(fmtKwh(totalCur),                         colXs[2], y + 4.6, { align: 'right' });
+    doc.text(Math.round(totalCurYpkw).toString(),      colXs[3], y + 4.6, { align: 'right' });
+    doc.text(fmtKwh(totalPrev),                        colXs[4], y + 4.6, { align: 'right' });
+    doc.text(Math.round(totalPrevYpkw).toString(),     colXs[5], y + 4.6, { align: 'right' });
+    doc.setTextColor(...totalDiffColor);
+    doc.text(totalDiffPct == null ? '—' : `${totalDiffPct >= 0 ? '+' : ''}${totalDiffPct.toFixed(0)}%`,
+      colXs[6], y + 4.6, { align: 'right' });
+    y += TOT_H + 3;
   }
 
   doc.save(`Energy-Report_${data.siteLabel.replace(/\s+/g, '-')}_${month}.pdf`);
