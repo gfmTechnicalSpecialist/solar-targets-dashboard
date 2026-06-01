@@ -87,6 +87,10 @@ interface ReportData {
   demand: DemandBreakdown | null;
   solarGenerationKwh: number;
   targetKwh: number;
+  /** Previous month progress (for comparison) */
+  prevMonthKey: string;
+  prevSolarGenerationKwh: number;
+  prevTargetKwh: number;
   /** 30-min power-flow data (PV / Load / BESS / Grid) */
   powerFlow: PowerFlowPoint[] | null;
   /** Total measured GHI for the month (Wh/m²) — weather sensor */
@@ -589,27 +593,56 @@ function generatePdf(data: ReportData) {
 
   y += 19;
 
-  // Solar target row (single compact line)
-  if (data.solarGenerationKwh > 0 || data.targetKwh > 0) {
-    doc.setFillColor(...BG_LIGHT);
-    doc.setDrawColor(...BORDER);
-    doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(...DARK);
-    doc.text('Solar Generation vs Target', margin + 4, y + 4.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(...GREY);
-    doc.text(`Actual: ${fmtKwh(data.solarGenerationKwh)} kWh   Target: ${fmtKwh(data.targetKwh)} kWh`, margin + 4, y + 8.2);
-    if (targetAchievePct != null) {
-      const pctColor = (targetAchievePct >= 95 ? GREEN : targetAchievePct >= 80 ? AMBER : RED) as [number, number, number];
+  // Solar target rows (selected month + previous month for comparison)
+  const hasAnyTarget =
+    data.solarGenerationKwh > 0 || data.targetKwh > 0 ||
+    data.prevSolarGenerationKwh > 0 || data.prevTargetKwh > 0;
+
+  if (hasAnyTarget) {
+    const prevPct = data.prevTargetKwh > 0
+      ? (data.prevSolarGenerationKwh / data.prevTargetKwh) * 100
+      : null;
+
+    const renderTargetRow = (
+      title: string,
+      actual: number,
+      target: number,
+      pct: number | null,
+    ) => {
+      doc.setFillColor(...BG_LIGHT);
+      doc.setDrawColor(...BORDER);
+      doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'FD');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(...pctColor);
-      doc.text(`${targetAchievePct.toFixed(1)}% of target`, pageW - margin - 4, y + 6.5, { align: 'right' });
-    }
-    y += 14;
+      doc.setFontSize(7);
+      doc.setTextColor(...DARK);
+      doc.text(title, margin + 4, y + 4.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...GREY);
+      doc.text(`Actual: ${fmtKwh(actual)} kWh   Target: ${fmtKwh(target)} kWh`, margin + 4, y + 8.2);
+      if (pct != null) {
+        const pctColor = (pct >= 95 ? GREEN : pct >= 80 ? AMBER : RED) as [number, number, number];
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...pctColor);
+        doc.text(`${pct.toFixed(1)}% of target`, pageW - margin - 4, y + 6.5, { align: 'right' });
+      }
+      y += 12;
+    };
+
+    renderTargetRow(
+      `Solar Generation vs Target — ${monthLabel(data.monthKey)}`,
+      data.solarGenerationKwh,
+      data.targetKwh,
+      targetAchievePct,
+    );
+    renderTargetRow(
+      `Solar Generation vs Target — ${monthLabel(data.prevMonthKey)} (previous)`,
+      data.prevSolarGenerationKwh,
+      data.prevTargetKwh,
+      prevPct,
+    );
+    y += 2;
   } else {
     y += 3;
   }
@@ -1007,18 +1040,28 @@ const EnergyReportTab: React.FC = () => {
     const siteTargets = (targets as Record<string, Record<string, number>>)[site] ?? {};
     const targetKwh = siteTargets[selectedKey] ?? 0;
 
+    // Previous month bounds (for comparison row in the PDF)
+    const prevMonthNum = month === 1 ? 12 : month - 1;
+    const prevYearNum  = month === 1 ? year - 1 : year;
+    const prevMonthKey = `${prevYearNum}-${String(prevMonthNum).padStart(2, '0')}`;
+    const prevDaysCount = daysInMonth(prevYearNum, prevMonthNum);
+    const prevStartDate = `${prevMonthKey}-01`;
+    const prevEndDate   = `${prevMonthKey}-${String(prevDaysCount).padStart(2, '0')}`;
+    const prevTargetKwh = siteTargets[prevMonthKey] ?? 0;
+
     setLoading(true);
     setError(null);
     setLastReport(null);
 
     try {
-      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow, ghiWhM2] = await Promise.all([
+      const [hourlyGrid, peakKva, loadPoints, dailyProd, powerFlow, ghiWhM2, prevDailyProd] = await Promise.all([
         fetchMonthlyGridEnergyHourly(user.token, year, month, site),
         fetchMonthlyPeakDemand(user.token, year, month, site).catch(() => null),
         fetchMonthlyLoadEnergyHourly(user.token, year, month, site).catch(() => null),
         fetchDailyProduction(user.token, daysCount, site, { startDate, endDate }).catch(() => null),
         fetchMonthlyPowerFlow(user.token, year, month, site).catch(() => null),
         fetchMonthlyIrradiance(user.token, year, month, site).catch(() => null),
+        fetchDailyProduction(user.token, prevDaysCount, site, { startDate: prevStartDate, endDate: prevEndDate }).catch(() => null),
       ]);
 
       const touConfig = getTouConfig(site);
@@ -1027,6 +1070,9 @@ const EnergyReportTab: React.FC = () => {
       const demand = peakKva != null ? calculateDemandCharge(peakKva, getTouConfig(site).demandRatePerKva) : null;
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
+        : 0;
+      const prevSolarGenerationKwh = prevDailyProd
+        ? Math.round(prevDailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
         : 0;
 
       const reportData: ReportData = {
@@ -1038,6 +1084,9 @@ const EnergyReportTab: React.FC = () => {
         demand,
         solarGenerationKwh,
         targetKwh,
+        prevMonthKey,
+        prevSolarGenerationKwh,
+        prevTargetKwh,
         powerFlow: powerFlow && powerFlow.length > 0 ? powerFlow : null,
         measuredGhiWhM2: ghiWhM2 ?? null,
       };
