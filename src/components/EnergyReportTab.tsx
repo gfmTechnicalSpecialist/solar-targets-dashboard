@@ -1046,11 +1046,11 @@ function generatePdf(data: ReportData) {
 
     const colXs = [
       margin + 3,                       // Description (left-aligned)
-      margin + 55,                      // Size (kW)        (right-aligned)
-      margin + 95,                      // Cur Yield (kWh)  (right-aligned)
-      margin + 120,                     // Cur kWh/kW
-      margin + 150,                     // Prev Yield (kWh)
-      margin + 172,                     // Prev kWh/kW
+      margin + 50,                      // Size (kW)        (right-aligned)
+      margin + 85,                      // Cur Yield (kWh)  (right-aligned)
+      margin + 108,                     // Cur kWh/kW
+      margin + 145,                     // Prev Yield (kWh)
+      margin + 168,                     // Prev kWh/kW
       margin + contentW - 2,            // Difference
     ];
 
@@ -1061,7 +1061,7 @@ function generatePdf(data: ReportData) {
       { label: 'kWh/kW',                x: colXs[3], align: 'right' as const },
       { label: `${prevMonthLabel} kWh`, x: colXs[4], align: 'right' as const },
       { label: 'kWh/kW',                x: colXs[5], align: 'right' as const },
-      { label: 'Difference',            x: colXs[6], align: 'right' as const },
+      { label: 'Diff %',                x: colXs[6], align: 'right' as const },
     ];
     tableHeader(headerCols);
 
