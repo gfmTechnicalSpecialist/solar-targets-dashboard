@@ -260,6 +260,22 @@ function drawPowerFlowCharts(
       ctx.fillText(`${Math.round(val)}`, PAD_L - 8, py + 6);
     }
 
+    // Explicit zero baseline (drawn even when 0 doesn't land on a tick)
+    if (yMin < 0 && yMax > 0) {
+      const py0 = toY(0);
+      ctx.strokeStyle = '#6b7280';
+      ctx.lineWidth   = 1.6;
+      ctx.setLineDash([8, 5]);
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, py0); ctx.lineTo(CW - PAD_R, py0);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle  = '#374151';
+      ctx.font       = 'bold 16px sans-serif';
+      ctx.textAlign  = 'right';
+      ctx.fillText('0', PAD_L - 8, py0 + 5);
+    }
+
     // Y-axis unit label
     ctx.save();
     ctx.fillStyle  = '#9ca3af';

@@ -26,6 +26,7 @@ import CsvDownloadTab from './CsvDownloadTab';
 import EngineeringView from './EngineeringView';
 import EnergyReportTab from './EnergyReportTab';
 import TariffStatsCard from './TariffStatsCard';
+import TouInfoButton from './TouInfoButton';
 type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering' | 'Energy Report';
 
 type CardId =
@@ -202,6 +203,7 @@ const Dashboard: React.FC = () => {
             <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            <TouInfoButton />
             <button className="btn-signout" onClick={signOut}>
               <LogOut size={14} />
               <span>Sign Out</span>
