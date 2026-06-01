@@ -107,6 +107,14 @@ const SITE_HIGECO: Record<'parc-du-cap' | 'centurion', SiteHigecoConfig> = {
       items: [2051937957],
       period: '1800',
     },
+    gridPower: {
+      idLog: 1999433,
+      items: [1999433114],
+    },
+    bess: {
+      idLog: 1999433,
+      items: [1999433126],
+    },
   },
 };
 
