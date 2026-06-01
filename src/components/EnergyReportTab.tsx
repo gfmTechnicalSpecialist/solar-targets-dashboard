@@ -152,6 +152,13 @@ function drawPowerFlowCharts(
 
   const results: WeekChartResult[] = [];
 
+  // ── Shared Y-axis range across all weekly charts (consistent comparison) ──
+  // Use a 100-kW step so labels stay round; include 0 as a hard floor/ceiling.
+  const Y_STEP = 100;
+  const globalVals = points.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw, p.gridKva]);
+  const globalYMin = Math.floor(Math.min(0,   ...globalVals) / Y_STEP) * Y_STEP;
+  const globalYMax = Math.ceil (Math.max(100, ...globalVals) / Y_STEP) * Y_STEP;
+
   weeks.forEach(([weekKey, weekPoints], wi) => {
     const [wy, wm, wd] = weekKey.split('-').map(Number);
     const monDate = new Date(Date.UTC(wy, wm - 1, wd));
@@ -222,10 +229,9 @@ function drawPowerFlowCharts(
       return;
     }
 
-    // Y range — include kVA values so the axis fits all series
-    const allVals = weekPoints.flatMap(p => [p.pvKw, p.loadKw, p.bessKw, p.gridKw, p.gridKva]);
-    const yMin = Math.floor(Math.min(0, ...allVals) / 50) * 50;
-    const yMax = Math.ceil (Math.max(50, ...allVals) / 50) * 50;
+    // Y range — shared across all weekly charts for consistent comparison
+    const yMin = globalYMin;
+    const yMax = globalYMax;
     const yRange = yMax - yMin;
 
     const minTs   = weekPoints[0].timestamp;

@@ -40,9 +40,15 @@ const PERIOD_COLORS: Record<ScheduleRow['period'], string> = {
 const TouInfoButton: React.FC = () => {
   const [open, setOpen] = useState(false);
   const { siteId, siteLabel } = useSite();
-  const cfg = getTouConfig(siteId as 'parc-du-cap' | 'centurion');
-  const schedule = siteId === 'centurion' ? CENTURION_SCHEDULE : PDC_SCHEDULE;
+  // 'all' (portfolio view) falls back to PDC tariff for display purposes.
+  const tariffSite: 'parc-du-cap' | 'centurion' =
+    siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
+  const cfg = getTouConfig(tariffSite);
+  const schedule = tariffSite === 'centurion' ? CENTURION_SCHEDULE : PDC_SCHEDULE;
   const season = currentSeason();
+  const displayLabel = siteId === 'all'
+    ? `${siteLabel} (showing ${tariffSite === 'centurion' ? 'Centurion' : 'PDC'} tariff)`
+    : siteLabel;
 
   return (
     <>
@@ -97,7 +103,7 @@ const TouInfoButton: React.FC = () => {
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Tariff & TOU Information</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {siteLabel} · {season} season
+                  {displayLabel} · {season} season
                 </div>
               </div>
               <button
