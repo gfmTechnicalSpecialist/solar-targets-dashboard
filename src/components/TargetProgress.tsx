@@ -203,7 +203,7 @@ const TargetProgress: React.FC = () => {
 
       {/* 4 cards grid */}
       <div className="tp-grid" style={{ position: 'relative' }}>
-        {loading && !hasLoadedOnce && (
+        {loading && (
           <div className="chart-loading-overlay">
             <div className="chart-loading-inner">
               <Loader2 size={28} className="spinner" />
