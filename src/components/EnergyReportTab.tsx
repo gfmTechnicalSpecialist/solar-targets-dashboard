@@ -87,7 +87,7 @@ interface ReportData {
   demand: DemandBreakdown | null;
   solarGenerationKwh: number;
   targetKwh: number;
-  /** 30-min power-flow data — PDC only */
+  /** 30-min power-flow data (PV / Load / BESS / Grid) */
   powerFlow: PowerFlowPoint[] | null;
   /** Total measured GHI for the month (Wh/m²) — weather sensor */
   measuredGhiWhM2: number | null;
@@ -908,7 +908,7 @@ function generatePdf(data: ReportData) {
   doc.text('CoCT 2025/26 MV TOU — Low Demand season rates. Charges exclude VAT unless stated.', margin, pageH - 7.5);
   doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 7.5, { align: 'right' });
 
-  // ── POWER FLOW PAGES (PDC only) ──────────────────────────────────────────
+  // ── POWER FLOW PAGES ─────────────────────────────────────────────────────
   if (data.powerFlow && data.powerFlow.length > 0) {
     const weekCharts = drawPowerFlowCharts(data.powerFlow, label);
 
@@ -1125,7 +1125,7 @@ const EnergyReportTab: React.FC = () => {
             'Monthly service charge',
             'PV/BESS savings by TOU period',
             'Total bill saving & self-supply rate',
-            'Power flow chart — PV, Load, BESS & Grid (30-min)',  // PDC only
+            'Power flow chart — PV, Load, BESS & Grid (30-min)',
           ].map((item) => (
             <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
