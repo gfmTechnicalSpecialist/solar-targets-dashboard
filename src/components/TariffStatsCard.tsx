@@ -4,8 +4,8 @@ import { monthlyTariffData } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchMonthlyGridEnergyHourly, fetchMonthlyLoadEnergyHourly, fetchMonthlyPeakDemand } from '../api/higeco';
-import { calculateTouCharges, calculateDemandCharge, getTouConfig, PDC_TOU_RATES, PDC_DEMAND_RATE_PER_KVA, SERVICE_CHARGE_EXCL_VAT } from '../api/tou';
-import type { TouBreakdown, DemandBreakdown, TouRates } from '../api/tou';
+import { calculateTouCharges, calculateDemandCharge, getTouConfig, TOU_CONFIG_BY_SITE } from '../api/tou';
+import type { TouBreakdown, DemandBreakdown, TouConfig } from '../api/tou';
 
 const CURRENT_MONTH_KEY = '2026-05';
 
@@ -23,7 +23,8 @@ const SetupPlaceholder: React.FC = () => (
 
 interface TouRow { label: string; kwh: number; rate: number; charge: number; color: string; }
 
-const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null; energyOnly?: boolean; rates?: TouRates; demandRatePerKva?: number }> = ({ breakdown, demand, energyOnly, rates = PDC_TOU_RATES, demandRatePerKva = PDC_DEMAND_RATE_PER_KVA }) => {
+const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown | null; energyOnly?: boolean; config?: TouConfig }> = ({ breakdown, demand, energyOnly, config = TOU_CONFIG_BY_SITE['parc-du-cap'] }) => {
+  const { rates, demandRatePerKva, serviceChargeExclVat, fixedDemandChargeExclVat } = config;
   const rows: TouRow[] = [
     { label: 'Energy — Peak',     kwh: breakdown.peakKwh,     rate: rates.peak,     charge: breakdown.peakCharge,     color: 'var(--danger)' },
     { label: 'Energy — Standard', kwh: breakdown.standardKwh, rate: rates.standard, charge: breakdown.standardCharge, color: 'var(--warning)' },
@@ -31,7 +32,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
   ];
   const grandTotal = energyOnly
     ? breakdown.totalCharge
-    : breakdown.totalCharge + (demand?.demandCharge ?? 0) + SERVICE_CHARGE_EXCL_VAT;
+    : breakdown.totalCharge + (demand?.demandCharge ?? fixedDemandChargeExclVat ?? 0) + serviceChargeExclVat;
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
@@ -53,15 +54,17 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             </td>
           </tr>
         ))}
-        {!energyOnly && demand != null && (
+        {!energyOnly && (demand != null || fixedDemandChargeExclVat != null) && (
           <tr style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', borderTop: '1px dashed var(--border)' }}>
             <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Demand</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-              {demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA
+              {fixedDemandChargeExclVat == null && demand
+                ? `${demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA`
+                : '1 month'}
             </td>
-            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{demandRatePerKva.toFixed(4)}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{fixedDemandChargeExclVat == null ? demandRatePerKva.toFixed(4) : 'fixed'}</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {(demand?.demandCharge ?? fixedDemandChargeExclVat ?? 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
           </tr>
         )}
@@ -71,7 +74,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>1 month</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>fixed</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
           </tr>
         )}
@@ -100,13 +103,14 @@ interface SavingsAnalysisProps {
   included: TouBreakdown;
   excluded: TouBreakdown;
   demand: DemandBreakdown | null;
+  config: TouConfig;
 }
 
-const SavingsAnalysis: React.FC<SavingsAnalysisProps> = ({ included, excluded, demand }) => {
-  const demandCharge = demand?.demandCharge ?? 0;
+const SavingsAnalysis: React.FC<SavingsAnalysisProps> = ({ included, excluded, demand, config }) => {
+  const demandCharge = demand?.demandCharge ?? config.fixedDemandChargeExclVat ?? 0;
 
-  const inclTotal = included.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT;
-  const exclTotal = excluded.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT;
+  const inclTotal = included.totalCharge + demandCharge + config.serviceChargeExclVat;
+  const exclTotal = excluded.totalCharge + demandCharge + config.serviceChargeExclVat;
   const totalSavings = exclTotal - inclTotal;
   const savingsPct = exclTotal > 0 ? (totalSavings / exclTotal) * 100 : 0;
 
@@ -229,6 +233,9 @@ const TariffStatsCard: React.FC = () => {
 
   // Whether we can fetch real data: must be signed in and on a specific site
   const canFetchLive = !!user?.token && (siteId === 'parc-du-cap' || siteId === 'centurion');
+  const [, selectedMonthStr] = selectedKey.split('-');
+  const selectedMonth = parseInt(selectedMonthStr, 10);
+  const activeTouConfig = canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion', selectedMonth) : TOU_CONFIG_BY_SITE['parc-du-cap'];
 
   useEffect(() => {
     if (!canFetchLive) {
@@ -255,10 +262,12 @@ const TariffStatsCard: React.FC = () => {
       fetchMonthlyLoadEnergyHourly(user.token, year, month, siteArg).catch(() => null as null),
     ])
       .then(([hourlyPoints, peakKva, loadPoints]) => {
-        const touConfig = getTouConfig(siteArg);
+        const touConfig = getTouConfig(siteArg, month);
         setLiveBreakdown(calculateTouCharges(hourlyPoints, touConfig));
         if (peakKva != null) {
-          setDemandBreakdown(calculateDemandCharge(peakKva, touConfig.demandRatePerKva));
+          setDemandBreakdown(calculateDemandCharge(peakKva, touConfig));
+        } else if (touConfig.fixedDemandChargeExclVat != null) {
+          setDemandBreakdown(calculateDemandCharge(0, touConfig));
         }
         if (loadPoints != null) {
           setExcludedBreakdown(calculateTouCharges(loadPoints, touConfig));
@@ -335,7 +344,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : liveBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} demandRatePerKva={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').demandRatePerKva : PDC_DEMAND_RATE_PER_KVA} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} config={activeTouConfig} /></div>
             ) : !loading ? (
               <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
             ) : null}
@@ -351,7 +360,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : excludedBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} rates={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').rates : PDC_TOU_RATES} demandRatePerKva={canFetchLive ? getTouConfig(siteId as 'parc-du-cap' | 'centurion').demandRatePerKva : PDC_DEMAND_RATE_PER_KVA} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} config={activeTouConfig} /></div>
             ) : !loading ? (
               <SetupPlaceholder />
             ) : null}
@@ -360,7 +369,7 @@ const TariffStatsCard: React.FC = () => {
 
           {/* Savings analysis — rendered once both tables have data */}
           {liveBreakdown && excludedBreakdown && (
-            <SavingsAnalysis included={liveBreakdown} excluded={excludedBreakdown} demand={demandBreakdown} />
+            <SavingsAnalysis included={liveBreakdown} excluded={excludedBreakdown} demand={demandBreakdown} config={activeTouConfig} />
           )}
         </>
       ) : (

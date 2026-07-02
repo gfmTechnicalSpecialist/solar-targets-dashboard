@@ -7,14 +7,33 @@ import {
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  PDC_TOU_RATES,
-  PDC_DEMAND_RATE_PER_KVA,
-  SERVICE_CHARGE_EXCL_VAT,
+  getTouConfig,
 } from '../api/tou';
 
 const FinancialAnalysisTab: React.FC = () => {
   const { siteId } = useSite();
   const { isAuthenticated } = useAuth();
+  const selectedTariffSite = siteId === 'centurion' || siteId === 'parc-du-cap' ? siteId : null;
+  const tariffConfig = selectedTariffSite ? getTouConfig(selectedTariffSite) : null;
+  const tariffMeta = selectedTariffSite === 'centurion'
+    ? {
+        badge: 'Tshwane 11kV TOU SEM',
+        classification: [
+          { label: 'Utility', value: 'City of Tshwane' },
+          { label: 'Category', value: '11kV Supply Scale TOU' },
+          { label: 'Voltage Level', value: '11kV' },
+          { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'SEM Winter (Jun-Aug)' : 'SEM Summer (Sep-May)' },
+        ],
+      }
+    : {
+        badge: 'CoCT MV TOU 2025/26',
+        classification: [
+          { label: 'Utility', value: 'City of Cape Town' },
+          { label: 'Category', value: 'Large Power User (TOU)' },
+          { label: 'Voltage Level', value: 'Medium Voltage (MV)' },
+          { label: 'Current Season', value: 'Low Demand (Sep-May)' },
+        ],
+      };
 
   return (
     <>
@@ -26,8 +45,8 @@ const FinancialAnalysisTab: React.FC = () => {
         </div>
       </section>
 
-      {/* CoCT MV TOU tariff classification — Parc du Cap only */}
-      {siteId === 'parc-du-cap' && (
+      {/* Site tariff classification */}
+      {selectedTariffSite && tariffConfig && (
         <section className="chart-section">
           <div className="chart-card">
             <div className="chart-card-header" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -35,7 +54,7 @@ const FinancialAnalysisTab: React.FC = () => {
                 <Building2 size={16} /> Tariff Classification
               </h2>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: 'rgba(59,130,246,0.12)', color: 'var(--info)' }}>
-                CoCT MV TOU 2025/26
+                {tariffMeta.badge}
               </span>
             </div>
             <div style={{ padding: '1.25rem 1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -43,12 +62,7 @@ const FinancialAnalysisTab: React.FC = () => {
               <div>
                 <p style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Classification</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {[
-                    { label: 'Utility', value: 'City of Cape Town' },
-                    { label: 'Category', value: 'Large Power User (TOU)' },
-                    { label: 'Voltage Level', value: 'Medium Voltage (MV)' },
-                    { label: 'Current Season', value: 'Low Demand (Sep – May)' },
-                  ].map(({ label, value }) => (
+                  {tariffMeta.classification.map(({ label, value }) => (
                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', borderBottom: '1px solid var(--border-subtle, var(--border))', paddingBottom: '0.35rem' }}>
                       <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
                       <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{value}</span>
@@ -62,11 +76,11 @@ const FinancialAnalysisTab: React.FC = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <tbody>
                     {[
-                      { label: 'Peak energy', value: `R ${PDC_TOU_RATES.peak.toFixed(4)} / kWh`, color: 'var(--danger)' },
-                      { label: 'Standard energy', value: `R ${PDC_TOU_RATES.standard.toFixed(4)} / kWh`, color: 'var(--warning)' },
-                      { label: 'Off-peak energy', value: `R ${PDC_TOU_RATES.offpeak.toFixed(4)} / kWh`, color: 'var(--info)' },
-                      { label: 'Demand', value: `R ${PDC_DEMAND_RATE_PER_KVA.toFixed(2)} / kVA`, color: 'var(--text-primary)' },
-                      { label: 'Service charge', value: `R ${SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
+                      { label: 'Peak energy', value: `R ${tariffConfig.rates.peak.toFixed(4)} / kWh`, color: 'var(--danger)' },
+                      { label: 'Standard energy', value: `R ${tariffConfig.rates.standard.toFixed(4)} / kWh`, color: 'var(--warning)' },
+                      { label: 'Off-peak energy', value: `R ${tariffConfig.rates.offpeak.toFixed(4)} / kWh`, color: 'var(--info)' },
+                      { label: 'Demand', value: tariffConfig.fixedDemandChargeExclVat == null ? `R ${tariffConfig.demandRatePerKva.toFixed(2)} / kVA` : `R ${tariffConfig.fixedDemandChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
+                      { label: 'Service charge', value: `R ${tariffConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
                     ].map(({ label, value, color }) => (
                       <tr key={label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
                         <td style={{ padding: '5px 0', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

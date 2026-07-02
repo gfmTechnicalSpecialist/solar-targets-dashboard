@@ -17,8 +17,6 @@ import {
   calculateTouCharges,
   calculateDemandCharge,
   getTouConfig,
-  SERVICE_CHARGE_EXCL_VAT,
-  SERVICE_CHARGE_INCL_VAT,
 } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown } from '../api/tou';
 import targets from '../data/targets.json';
@@ -439,6 +437,7 @@ function generatePdf(data: ReportData) {
   const contentW = pageW - margin * 2;
 
   const month = data.monthKey;
+  const reportMonth = parseInt(month.split('-')[1], 10);
   const label = monthLabel(month);
   const generatedAt = new Date().toLocaleString('en-ZA', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -446,8 +445,9 @@ function generatePdf(data: ReportData) {
   });
 
   // Site-specific TOU rates for displayed rate columns
-  const siteRates = getTouConfig(data.siteId).rates;
-  const siteDemandRate = getTouConfig(data.siteId).demandRatePerKva;
+  const siteConfig = getTouConfig(data.siteId, reportMonth);
+  const siteRates = siteConfig.rates;
+  const siteDemandRate = siteConfig.demandRatePerKva;
 
   // Colours
   const GREEN  = [16, 185, 129] as const;
@@ -568,9 +568,9 @@ function generatePdf(data: ReportData) {
   };
 
   // ── DERIVED VALUES ───────────────────────────────────────────────────────
-  const demandCharge = data.demand?.demandCharge ?? 0;
-  const inclTotal = r2(data.included.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT);
-  const exclTotal = data.excluded ? r2(data.excluded.totalCharge + demandCharge + SERVICE_CHARGE_EXCL_VAT) : null;
+  const demandCharge = data.demand?.demandCharge ?? siteConfig.fixedDemandChargeExclVat ?? 0;
+  const inclTotal = r2(data.included.totalCharge + demandCharge + siteConfig.serviceChargeExclVat);
+  const exclTotal = data.excluded ? r2(data.excluded.totalCharge + demandCharge + siteConfig.serviceChargeExclVat) : null;
   const totalSavings = exclTotal != null ? r2(exclTotal - inclTotal) : null;
   const savingsPct = exclTotal && exclTotal > 0 ? ((totalSavings! / exclTotal) * 100) : null;
 
@@ -744,8 +744,8 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       halfRow(margin, halfW, [
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
-        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + halfW - 48, align: 'right' },
-        { text: siteDemandRate.toFixed(2), x: margin + halfW - 26, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: margin + halfW - 48, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(2) : 'fixed', x: margin + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
       ], false);
       y += ROW_H;
@@ -754,7 +754,7 @@ function generatePdf(data: ReportData) {
       { text: 'Service', x: margin + 3, align: 'left', bold: true },
       { text: '1 month', x: margin + halfW - 48, align: 'right' },
       { text: 'fixed', x: margin + halfW - 26, align: 'right' },
-      { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
+      { text: siteConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
     ], true);
     y += ROW_H;
     halfTotal(margin, halfW, `${fmtKwh(data.included.totalEnergyKwh)} kWh`, fmtR(inclTotal));
@@ -784,8 +784,8 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       halfRow(col2X, halfW, [
         { text: 'Demand', x: col2X + 3, align: 'left', bold: true },
-        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: col2X + halfW - 48, align: 'right' },
-        { text: siteDemandRate.toFixed(2), x: col2X + halfW - 26, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: col2X + halfW - 48, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(2) : 'fixed', x: col2X + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
       ], false);
       y += ROW_H;
@@ -794,7 +794,7 @@ function generatePdf(data: ReportData) {
       { text: 'Service', x: col2X + 3, align: 'left', bold: true },
       { text: '1 month', x: col2X + halfW - 48, align: 'right' },
       { text: 'fixed', x: col2X + halfW - 26, align: 'right' },
-      { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
+      { text: siteConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
     ], true);
     y += ROW_H;
     halfTotal(col2X, halfW, `${fmtKwh(data.excluded.totalEnergyKwh)} kWh`, fmtR(exclTotal!));
@@ -805,7 +805,7 @@ function generatePdf(data: ReportData) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(6);
     doc.setTextColor(...GREY);
-    doc.text(`With PV incl. VAT: ${fmtR(r2(inclTotal * 1.15))}   Without PV incl. VAT: ${fmtR(r2(exclTotal! * 1.15))}   Service charge VAT: ${fmtR(SERVICE_CHARGE_INCL_VAT - SERVICE_CHARGE_EXCL_VAT)}`, margin, y + 3.5);
+    doc.text(`With PV incl. VAT: ${fmtR(r2(inclTotal * 1.15))}   Without PV incl. VAT: ${fmtR(r2(exclTotal! * 1.15))}   Service charge VAT: ${fmtR(siteConfig.serviceChargeInclVat - siteConfig.serviceChargeExclVat)}`, margin, y + 3.5);
     y += 7;
 
   } else {
@@ -834,8 +834,8 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       tableRow([
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
-        { text: `${data.demand.peakKva.toFixed(1)} kVA`, x: margin + contentW - 84, align: 'right' },
-        { text: siteDemandRate.toFixed(4), x: margin + contentW - 52, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: margin + contentW - 84, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(4) : 'fixed', x: margin + contentW - 52, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
       ], false);
     }
@@ -843,7 +843,7 @@ function generatePdf(data: ReportData) {
       { text: 'Service Charge', x: margin + 3, align: 'left', bold: true },
       { text: '1 month', x: margin + contentW - 84, align: 'right' },
       { text: 'fixed', x: margin + contentW - 52, align: 'right' },
-      { text: SERVICE_CHARGE_EXCL_VAT.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
+      { text: siteConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
     ], true);
 
     totalRow('TOTAL (excl. VAT)', `${fmtKwh(data.included.totalEnergyKwh)} kWh`, fmtR(inclTotal));
@@ -1137,6 +1137,14 @@ const EnergyReportTab: React.FC = () => {
   const [lastReport, setLastReport] = useState<ReportData | null>(null);
 
   const canFetch = !!user?.token && (siteId === 'parc-du-cap' || siteId === 'centurion');
+  const selectedTariffNote = siteId === 'centurion'
+    ? 'Rates: City of Tshwane 11kV Supply Scale TOU SEM. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.'
+    : 'Rates: City of Cape Town 2025/26 MV TOU. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.';
+  const lastReportMonth = lastReport ? parseInt(lastReport.monthKey.split('-')[1], 10) : null;
+  const lastReportConfig = lastReport && lastReportMonth ? getTouConfig(lastReport.siteId, lastReportMonth) : null;
+  const lastReportBillWithPv = lastReport && lastReportConfig
+    ? r2(lastReport.included.totalCharge + (lastReport.demand?.demandCharge ?? lastReportConfig.fixedDemandChargeExclVat ?? 0) + lastReportConfig.serviceChargeExclVat)
+    : 0;
 
   const handleGenerate = async () => {
     if (!canFetch || !user?.token) return;
@@ -1180,10 +1188,12 @@ const EnergyReportTab: React.FC = () => {
         fetchMonthlyInverterEnergy(user.token, prevYearNum, prevMonthNum, site).catch(() => []),
       ]);
 
-      const touConfig = getTouConfig(site);
+      const touConfig = getTouConfig(site, month);
       const included = calculateTouCharges(hourlyGrid, touConfig);
       const excluded = loadPoints ? calculateTouCharges(loadPoints, touConfig) : null;
-      const demand = peakKva != null ? calculateDemandCharge(peakKva, getTouConfig(site).demandRatePerKva) : null;
+      const demand = peakKva != null || touConfig.fixedDemandChargeExclVat != null
+        ? calculateDemandCharge(peakKva ?? 0, touConfig)
+        : null;
       const solarGenerationKwh = dailyProd
         ? Math.round(dailyProd.reduce((s, d) => s + d.productionKwh, 0) * 10) / 10
         : 0;
@@ -1310,7 +1320,7 @@ const EnergyReportTab: React.FC = () => {
             'Solar generation vs monthly target',
             'TOU billing — with PV/BESS (grid import)',
             'TOU billing — without PV/BESS (total load)',
-            'Peak demand charge (kVA)',
+            'Demand charge',
             'Monthly service charge',
             'PV/BESS savings by TOU period',
             'Total bill saving & self-supply rate',
@@ -1323,7 +1333,7 @@ const EnergyReportTab: React.FC = () => {
           ))}
         </div>
         <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.85rem', marginBottom: 0 }}>
-          Rates: City of Cape Town 2025/26 MV TOU — Low Demand season. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.
+          {selectedTariffNote}
         </p>
       </div>
 
@@ -1336,7 +1346,7 @@ const EnergyReportTab: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
             {[
               { label: 'Grid Import', value: `${fmtKwh(lastReport.included.totalEnergyKwh)} kWh` },
-              { label: 'Bill (with PV)', value: fmtR(r2(lastReport.included.totalCharge + (lastReport.demand?.demandCharge ?? 0) + SERVICE_CHARGE_EXCL_VAT)) },
+              { label: 'Bill (with PV)', value: fmtR(lastReportBillWithPv) },
               { label: 'Bill Saving', value: lastReport.excluded ? fmtR(r2((lastReport.excluded.totalCharge - lastReport.included.totalCharge))) : '—' },
             ].map((kpi) => (
               <div key={kpi.label} style={{ background: 'var(--bg-main)', borderRadius: 7, padding: '0.7rem 0.9rem' }}>

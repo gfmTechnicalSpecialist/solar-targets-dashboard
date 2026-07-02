@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Info, X } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
-import { getTouConfig } from '../api/tou';
+import { CENTURION_TOU_RATES_BY_SEASON, getTouConfig, getTouSeasonForMonth } from '../api/tou';
 
 // ── Schedule data (mirrors classifiers in src/api/tou.ts) ─────────────────────
 type ScheduleRow = { period: 'Peak' | 'Standard' | 'Off-Peak'; hours: string };
@@ -23,7 +23,20 @@ const PDC_SCHEDULE: DaySchedule[] = [
   ]},
 ];
 
-const CENTURION_SCHEDULE: DaySchedule[] = PDC_SCHEDULE; // currently identical (low-demand)
+const CENTURION_SCHEDULE: DaySchedule[] = [
+  { day: 'Weekdays (Mon-Fri)', rows: [
+    { period: 'Peak',     hours: '06:00-08:00, 17:00-20:00' },
+    { period: 'Standard', hours: '08:00-17:00, 20:00-22:00' },
+    { period: 'Off-Peak', hours: '22:00-06:00' },
+  ]},
+  { day: 'Saturday', rows: [
+    { period: 'Standard', hours: '07:00-12:00, 17:00-19:00' },
+    { period: 'Off-Peak', hours: 'all other hours' },
+  ]},
+  { day: 'Sunday', rows: [
+    { period: 'Off-Peak', hours: 'all day' },
+  ]},
+];
 
 // South Africa demand seasons: High = Jun–Aug, Low = Sep–May
 function currentSeason(): 'High Demand' | 'Low Demand' {
@@ -46,6 +59,7 @@ const TouInfoButton: React.FC = () => {
   const cfg = getTouConfig(tariffSite);
   const schedule = tariffSite === 'centurion' ? CENTURION_SCHEDULE : PDC_SCHEDULE;
   const season = currentSeason();
+  const centurionSeason = getTouSeasonForMonth(new Date().getMonth() + 1);
   const displayLabel = siteId === 'all'
     ? `${siteLabel} (showing ${tariffSite === 'centurion' ? 'Centurion' : 'PDC'} tariff)`
     : siteLabel;
@@ -123,32 +137,61 @@ const TouInfoButton: React.FC = () => {
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
                 Energy Rates (R/kWh, excl. VAT)
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: 18 }}>
-                <tbody>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '8px 0', color: PERIOD_COLORS.Peak, fontWeight: 600 }}>Peak</td>
-                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.peak.toFixed(4)}</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '8px 0', color: PERIOD_COLORS.Standard, fontWeight: 600 }}>Standard</td>
-                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.standard.toFixed(4)}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '8px 0', color: PERIOD_COLORS['Off-Peak'], fontWeight: 600 }}>Off-Peak</td>
-                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.offpeak.toFixed(4)}</td>
-                  </tr>
-                </tbody>
-              </table>
+              {tariffSite === 'centurion' ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: 18 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ padding: '6px 0', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>SEM Summer</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>SEM Winter</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label: 'Peak', key: 'peak' as const, color: PERIOD_COLORS.Peak },
+                      { label: 'Standard', key: 'standard' as const, color: PERIOD_COLORS.Standard },
+                      { label: 'Off-Peak', key: 'offpeak' as const, color: PERIOD_COLORS['Off-Peak'] },
+                    ].map((row) => (
+                      <tr key={row.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
+                        <td style={{ padding: '8px 0', color: row.color, fontWeight: 600 }}>{row.label}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: centurionSeason === 'summer' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.summer[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: centurionSeason === 'winter' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.winter[row.key].toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: 18 }}>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', color: PERIOD_COLORS.Peak, fontWeight: 600 }}>Peak</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.peak.toFixed(4)}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', color: PERIOD_COLORS.Standard, fontWeight: 600 }}>Standard</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.standard.toFixed(4)}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '8px 0', color: PERIOD_COLORS['Off-Peak'], fontWeight: 600 }}>Off-Peak</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.offpeak.toFixed(4)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
 
               {/* Demand */}
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
-                Demand Charge
+                Monthly Charges
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: 18 }}>
                 <tbody>
                   <tr>
-                    <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>Rate per kVA (chargeable demand)</td>
-                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.demandRatePerKva.toFixed(2)}</td>
+                    <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{cfg.fixedDemandChargeExclVat == null ? 'Rate per kVA (chargeable demand)' : 'Monthly demand'}</td>
+                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {(cfg.fixedDemandChargeExclVat ?? cfg.demandRatePerKva).toFixed(2)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>Monthly service</td>
+                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.serviceChargeExclVat.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>

@@ -22,6 +22,8 @@ export interface TouRates {
   offpeak: number;  // R/kWh
 }
 
+export type TouSeason = 'summer' | 'winter';
+
 /** Parc du Cap TOU rates — City of Cape Town 2025/26 MV TOU, low demand season. */
 export const PDC_TOU_RATES: TouRates = {
   peak: 3.3396,     // 333.96 c/kWh
@@ -33,7 +35,14 @@ export const PDC_TOU_RATES: TouRates = {
 export const PDC_DEMAND_RATE_PER_KVA = 93.36;
 
 /** Monthly demand charge rate for Centurion (R/kVA). */
-export const CENTURION_DEMAND_RATE_PER_KVA = 358.03;
+export const CENTURION_DEMAND_RATE_PER_KVA = 0;
+
+/** Centurion SEM monthly demand charge (fixed monthly charge, excl. VAT). */
+export const CENTURION_MONTHLY_DEMAND_CHARGE_EXCL_VAT = 4_321.63;
+
+/** Centurion SEM fixed monthly service charge (excl. VAT). */
+export const CENTURION_SERVICE_CHARGE_EXCL_VAT = 358.06;
+export const CENTURION_SERVICE_CHARGE_INCL_VAT = 411.77;
 
 /**
  * CoCT 2025/26 MV TOU fixed monthly service charge.
@@ -49,16 +58,22 @@ export interface DemandBreakdown {
   peakKva: number;
   /** Demand charge in Rand (peakKva × ratePerKva) */
   demandCharge: number;
+  /** Whether the charge was calculated from peak kVA or supplied as a fixed SEM monthly cost */
+  chargeBasis: 'per-kva' | 'fixed-monthly';
 }
 
 /** Calculate the monthly demand charge from a peak kVA reading. */
 export function calculateDemandCharge(
   peakKva: number,
-  ratePerKva: number = PDC_DEMAND_RATE_PER_KVA,
+  rateOrConfig: number | TouConfig = PDC_DEMAND_RATE_PER_KVA,
 ): DemandBreakdown {
+  const fixedMonthlyCharge = typeof rateOrConfig === 'number' ? undefined : rateOrConfig.fixedDemandChargeExclVat;
+  const ratePerKva = typeof rateOrConfig === 'number' ? rateOrConfig : rateOrConfig.demandRatePerKva;
+
   return {
     peakKva,
-    demandCharge: Math.round(peakKva * ratePerKva * 100) / 100,
+    demandCharge: Math.round((fixedMonthlyCharge ?? peakKva * ratePerKva) * 100) / 100,
+    chargeBasis: fixedMonthlyCharge == null ? 'per-kva' : 'fixed-monthly',
   };
 }
 
@@ -70,6 +85,10 @@ export interface TouConfig {
   rates: TouRates;
   classify: TouClassifier;
   demandRatePerKva: number;
+  serviceChargeExclVat: number;
+  serviceChargeInclVat: number;
+  fixedDemandChargeExclVat?: number;
+  season?: TouSeason;
 }
 
 /**
@@ -106,14 +125,26 @@ export function classifyTouPeriod(sastHour: number, dayOfWeek: number): TouPerio
   return 'offpeak';
 }
 
-/**
- * Centurion high-demand-season TOU rates (R/kWh).
- */
-export const CENTURION_TOU_RATES: TouRates = {
-  peak: 2.75,
-  standard: 1.70,
-  offpeak: 1.20,
+export const CENTURION_TOU_RATES_BY_SEASON: Record<TouSeason, TouRates> = {
+  summer: {
+    peak: 2.7476,
+    standard: 1.6972,
+    offpeak: 1.2010,
+  },
+  winter: {
+    peak: 7.1725,
+    standard: 2.6198,
+    offpeak: 1.3963,
+  },
 };
+
+/** Centurion summer SEM TOU rates (R/kWh). */
+export const CENTURION_TOU_RATES: TouRates = CENTURION_TOU_RATES_BY_SEASON.summer;
+
+/** South African municipal high-demand season is Jun-Aug; Centurion SEM labels this winter. */
+export function getTouSeasonForMonth(month: number): TouSeason {
+  return month >= 6 && month <= 8 ? 'winter' : 'summer';
+}
 
 /**
  * Classify an hour into a TOU period for Centurion (high demand season schedule).
@@ -146,13 +177,36 @@ export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number):
   return 'offpeak';
 }
 
-/** Per-site TOU configuration (rates + period classifier + demand rate). */
+/** Per-site TOU configuration (rates + period classifier + demand/service charges). */
 export const TOU_CONFIG_BY_SITE = {
-  'parc-du-cap': { rates: PDC_TOU_RATES,       classify: classifyTouPeriod,          demandRatePerKva: PDC_DEMAND_RATE_PER_KVA }       satisfies TouConfig,
-  centurion:     { rates: CENTURION_TOU_RATES, classify: classifyCenturionTouPeriod, demandRatePerKva: CENTURION_DEMAND_RATE_PER_KVA } satisfies TouConfig,
+  'parc-du-cap': {
+    rates: PDC_TOU_RATES,
+    classify: classifyTouPeriod,
+    demandRatePerKva: PDC_DEMAND_RATE_PER_KVA,
+    serviceChargeExclVat: SERVICE_CHARGE_EXCL_VAT,
+    serviceChargeInclVat: SERVICE_CHARGE_INCL_VAT,
+  } satisfies TouConfig,
+  centurion: {
+    rates: CENTURION_TOU_RATES,
+    classify: classifyCenturionTouPeriod,
+    demandRatePerKva: CENTURION_DEMAND_RATE_PER_KVA,
+    serviceChargeExclVat: CENTURION_SERVICE_CHARGE_EXCL_VAT,
+    serviceChargeInclVat: CENTURION_SERVICE_CHARGE_INCL_VAT,
+    fixedDemandChargeExclVat: CENTURION_MONTHLY_DEMAND_CHARGE_EXCL_VAT,
+    season: 'summer',
+  } satisfies TouConfig,
 } as const;
 
-export function getTouConfig(siteId: keyof typeof TOU_CONFIG_BY_SITE): TouConfig {
+export function getTouConfig(siteId: keyof typeof TOU_CONFIG_BY_SITE, month = new Date().getMonth() + 1): TouConfig {
+  if (siteId === 'centurion') {
+    const season = getTouSeasonForMonth(month);
+    return {
+      ...TOU_CONFIG_BY_SITE.centurion,
+      rates: CENTURION_TOU_RATES_BY_SEASON[season],
+      season,
+    };
+  }
+
   return TOU_CONFIG_BY_SITE[siteId];
 }
 
@@ -182,7 +236,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  */
 export function calculateTouCharges(
   hourlyData: HourlyEnergyPoint[],
-  config: TouConfig = { rates: PDC_TOU_RATES, classify: classifyTouPeriod, demandRatePerKva: PDC_DEMAND_RATE_PER_KVA },
+  config: TouConfig = TOU_CONFIG_BY_SITE['parc-du-cap'],
 ): TouBreakdown {
   const { rates, classify } = config;
   let peakKwh = 0;
@@ -258,12 +312,15 @@ export interface BessTouSavings {
  * Net BESS saving = sum of discharge savings minus sum of charge costs.
  *
  * @param points  Hourly BESS energy points with signed kwhDelta.
- * @param rates   TOU energy rates to apply (default: PDC_TOU_RATES).
+ * @param ratesOrConfig   TOU energy rates or full site config to apply (default: Parc du Cap config).
  */
 export function calculateBessTouSavings(
   points: Array<{ timestamp: number; kwhDelta: number }>,
-  rates: TouRates = PDC_TOU_RATES,
+  ratesOrConfig: TouRates | TouConfig = TOU_CONFIG_BY_SITE['parc-du-cap'],
 ): BessTouSavings {
+  const isConfig = 'classify' in ratesOrConfig;
+  const rates = isConfig ? ratesOrConfig.rates : ratesOrConfig;
+  const classify = isConfig ? ratesOrConfig.classify : classifyTouPeriod;
   const SAST_OFFSET_MS = 2 * 3600 * 1000;
   let peakKwh = 0, standardKwh = 0, offpeakKwh = 0;
   let chargePeakKwh = 0, chargeStandardKwh = 0, chargeOffpeakKwh = 0;
@@ -272,7 +329,7 @@ export function calculateBessTouSavings(
     if (p.kwhDelta === 0) continue;
     const kwh = Math.abs(p.kwhDelta);
     const d = new Date(p.timestamp * 1000 + SAST_OFFSET_MS);
-    const period = classifyTouPeriod(d.getUTCHours(), d.getUTCDay());
+    const period = classify(d.getUTCHours(), d.getUTCDay());
 
     if (p.kwhDelta > 0) {
       // Discharging (meter delta positive = energy leaving the battery)
