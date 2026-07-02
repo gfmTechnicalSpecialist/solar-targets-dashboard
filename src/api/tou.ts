@@ -178,14 +178,16 @@ export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number):
 }
 
 /** Per-site TOU configuration (rates + period classifier + demand/service charges). */
-export const TOU_CONFIG_BY_SITE = {
+export type TouSiteId = 'parc-du-cap' | 'centurion';
+
+export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
   'parc-du-cap': {
     rates: PDC_TOU_RATES,
     classify: classifyTouPeriod,
     demandRatePerKva: PDC_DEMAND_RATE_PER_KVA,
     serviceChargeExclVat: SERVICE_CHARGE_EXCL_VAT,
     serviceChargeInclVat: SERVICE_CHARGE_INCL_VAT,
-  } satisfies TouConfig,
+  },
   centurion: {
     rates: CENTURION_TOU_RATES,
     classify: classifyCenturionTouPeriod,
@@ -194,10 +196,10 @@ export const TOU_CONFIG_BY_SITE = {
     serviceChargeInclVat: CENTURION_SERVICE_CHARGE_INCL_VAT,
     fixedDemandChargeExclVat: CENTURION_MONTHLY_DEMAND_CHARGE_EXCL_VAT,
     season: 'summer',
-  } satisfies TouConfig,
-} as const;
+  },
+};
 
-export function getTouConfig(siteId: keyof typeof TOU_CONFIG_BY_SITE, month = new Date().getMonth() + 1): TouConfig {
+export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 1): TouConfig {
   if (siteId === 'centurion') {
     const season = getTouSeasonForMonth(month);
     return {
