@@ -26,9 +26,7 @@ const LiveTouTable: React.FC<{
   demand?: DemandBreakdown | null;
   energyOnly?: boolean;
   config?: TouConfig;
-  seasonLabel: string;
-  tariffLabel: string;
-}> = ({ breakdown, demand, energyOnly, config = TOU_CONFIG_BY_SITE['parc-du-cap'], seasonLabel, tariffLabel }) => {
+}> = ({ breakdown, demand, energyOnly, config = TOU_CONFIG_BY_SITE['parc-du-cap'] }) => {
   const { rates, demandRatePerKva, serviceChargeExclVat, fixedDemandChargeExclVat } = config;
   const rows: TouRow[] = [
     { label: 'Energy — Peak',     kwh: breakdown.peakKwh,     rate: rates.peak,     charge: breakdown.peakCharge,     color: 'var(--danger)' },
@@ -41,11 +39,6 @@ const LiveTouTable: React.FC<{
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
-        <tr>
-          <th colSpan={4} style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid var(--border)', background: config.season === 'winter' ? 'rgba(59,130,246,0.13)' : 'rgba(245,158,11,0.16)', color: 'var(--text-primary)', fontWeight: 800, fontSize: '0.78rem' }}>
-            TOU season displayed: {seasonLabel} · {tariffLabel}
-          </th>
-        </tr>
         <tr style={{ borderBottom: '1px solid var(--border)' }}>
           <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>TOU Period</th>
           <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>kWh / kVA</th>
@@ -248,8 +241,8 @@ const TariffStatsCard: React.FC = () => {
   const tariffSite = siteId === 'centurion' || siteId === 'parc-du-cap' ? siteId : 'parc-du-cap';
   const activeTouConfig = Number.isNaN(selectedMonth) ? TOU_CONFIG_BY_SITE[tariffSite] : getTouConfig(tariffSite, selectedMonth);
   const seasonLabel = activeTouConfig.season === 'winter'
-    ? tariffSite === 'centurion' ? 'SEM Winter / high demand (June-August)' : 'High demand (June-August)'
-    : tariffSite === 'centurion' ? 'SEM Summer / low demand (September-May)' : 'Low demand (September-May)';
+    ? tariffSite === 'centurion' ? 'Winter / high demand (June-August)' : 'High demand (June-August)'
+    : tariffSite === 'centurion' ? 'Summer / low demand (September-May)' : 'Low demand (September-May)';
   const tariffLabel = siteId === 'all' ? `PDC tariff shown for ${siteLabel}` : `${siteLabel} tariff`;
 
   useEffect(() => {
@@ -365,7 +358,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : liveBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} config={activeTouConfig} seasonLabel={seasonLabel} tariffLabel={tariffLabel} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={liveBreakdown} demand={demandBreakdown} config={activeTouConfig} /></div>
             ) : !loading ? (
               <div style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No data returned for this period.</div>
             ) : null}
@@ -381,7 +374,7 @@ const TariffStatsCard: React.FC = () => {
                 <AlertCircle size={14} /> {fetchError}
               </div>
             ) : excludedBreakdown ? (
-              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} config={activeTouConfig} seasonLabel={seasonLabel} tariffLabel={tariffLabel} /></div>
+              <div style={{ overflowX: 'auto' }}><LiveTouTable breakdown={excludedBreakdown} demand={demandBreakdown} config={activeTouConfig} /></div>
             ) : !loading ? (
               <SetupPlaceholder />
             ) : null}

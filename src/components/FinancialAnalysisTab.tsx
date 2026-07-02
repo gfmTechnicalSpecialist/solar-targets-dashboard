@@ -22,7 +22,7 @@ const FinancialAnalysisTab: React.FC = () => {
           { label: 'Utility', value: 'City of Tshwane' },
           { label: 'Category', value: '11kV Supply Scale TOU' },
           { label: 'Voltage Level', value: '11kV' },
-          { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'SEM Winter (Jun-Aug)' : 'SEM Summer (Sep-May)' },
+          { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'Winter (Jun-Aug)' : 'Summer (Sep-May)' },
         ],
       }
     : {

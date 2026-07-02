@@ -142,8 +142,8 @@ const TouInfoButton: React.FC = () => {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <th style={{ padding: '6px 0', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge</th>
-                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>SEM Summer</th>
-                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>SEM Winter</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>Summer</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>Winter</th>
                     </tr>
                   </thead>
                   <tbody>
