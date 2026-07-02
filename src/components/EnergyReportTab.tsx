@@ -664,7 +664,7 @@ function generatePdf(data: ReportData) {
       { label: 'Period',     x: ox + 3,          align: 'left'  as const },
       { label: 'kWh',        x: ox + w - 48,     align: 'right' as const },
       { label: 'Rate',       x: ox + w - 26,     align: 'right' as const },
-      { label: 'Charge (R)', x: ox + w,          align: 'right' as const },
+      { label: 'Charge excl. VAT', x: ox + w,          align: 'right' as const },
     ];
 
     // For a two-column table we need custom row renderers scoped to a half
@@ -816,7 +816,7 @@ function generatePdf(data: ReportData) {
       { label: 'TOU Period',   x: margin + 3,             align: 'left'  as const },
       { label: 'Energy (kWh)', x: margin + contentW - 84, align: 'right' as const },
       { label: 'Rate (R/kWh)', x: margin + contentW - 52, align: 'right' as const },
-      { label: 'Charge (R)',   x: margin + contentW - 2,  align: 'right' as const },
+      { label: 'Charge excl. VAT',   x: margin + contentW - 2,  align: 'right' as const },
     ];
     tableHeader(cols);
 
@@ -966,7 +966,7 @@ function generatePdf(data: ReportData) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   doc.setTextColor(...GREY);
-  doc.text('CoCT 2025/26 MV TOU — Low Demand season rates. Charges exclude VAT unless stated.', margin, pageH - 7.5);
+  doc.text(`${data.siteLabel} TOU tariff rates. Charges exclude VAT unless stated.`, margin, pageH - 7.5);
   doc.text(`Momentum Group  |  ${data.siteLabel}  |  ${label}`, pageW - margin, pageH - 7.5, { align: 'right' });
 
   // ── POWER FLOW PAGES ─────────────────────────────────────────────────────

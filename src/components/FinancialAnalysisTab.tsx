@@ -31,9 +31,14 @@ const FinancialAnalysisTab: React.FC = () => {
           { label: 'Utility', value: 'City of Cape Town' },
           { label: 'Category', value: 'Large Power User (TOU)' },
           { label: 'Voltage Level', value: 'Medium Voltage (MV)' },
-          { label: 'Current Season', value: 'Low Demand (Sep-May)' },
+          { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'High Demand (Jun-Aug)' : 'Low Demand (Sep-May)' },
         ],
       };
+  const demandComponentRows = tariffConfig?.demandChargeComponents?.map((component) => ({
+    label: component.label,
+    value: `R ${component.rate.toFixed(2)} / ${component.unit.replace('R/', '')}`,
+    color: 'var(--text-primary)',
+  })) ?? [];
 
   return (
     <>
@@ -80,6 +85,7 @@ const FinancialAnalysisTab: React.FC = () => {
                       { label: 'Standard energy', value: `R ${tariffConfig.rates.standard.toFixed(4)} / kWh`, color: 'var(--warning)' },
                       { label: 'Off-peak energy', value: `R ${tariffConfig.rates.offpeak.toFixed(4)} / kWh`, color: 'var(--info)' },
                       { label: 'Demand', value: tariffConfig.fixedDemandChargeExclVat == null ? `R ${tariffConfig.demandRatePerKva.toFixed(2)} / kVA` : `R ${tariffConfig.fixedDemandChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
+                      ...demandComponentRows,
                       { label: 'Service charge', value: `R ${tariffConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
                     ].map(({ label, value, color }) => (
                       <tr key={label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>

@@ -37,8 +37,8 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
         <tr style={{ borderBottom: '1px solid var(--border)' }}>
           <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>TOU Period</th>
           <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>kWh / kVA</th>
-          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rate (R/unit)</th>
-          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge (R)</th>
+          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rate (R/unit excl. VAT)</th>
+          <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge (R excl. VAT)</th>
         </tr>
       </thead>
       <tbody>
@@ -79,7 +79,7 @@ const LiveTouTable: React.FC<{ breakdown: TouBreakdown; demand?: DemandBreakdown
       </tbody>
       <tfoot>
         <tr style={{ borderTop: '2px solid var(--success)' }}>
-          <td style={{ padding: '8px', fontWeight: 700, color: 'var(--success)' }}>Total</td>
+          <td style={{ padding: '8px', fontWeight: 700, color: 'var(--success)' }}>Total excl. VAT</td>
           <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
             {breakdown.totalEnergyKwh.toLocaleString('en-ZA', { minimumFractionDigits: 3 })} kWh
           </td>

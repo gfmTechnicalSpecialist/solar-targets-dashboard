@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Info, X } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
-import { CENTURION_TOU_RATES_BY_SEASON, getTouConfig, getTouSeasonForMonth } from '../api/tou';
+import { CENTURION_TOU_RATES_BY_SEASON, PDC_TOU_RATES_BY_SEASON, getTouConfig, getTouSeasonForMonth } from '../api/tou';
 
 // ── Schedule data (mirrors classifiers in src/api/tou.ts) ─────────────────────
 type ScheduleRow = { period: 'Peak' | 'Standard' | 'Off-Peak'; hours: string };
@@ -59,7 +59,7 @@ const TouInfoButton: React.FC = () => {
   const cfg = getTouConfig(tariffSite);
   const schedule = tariffSite === 'centurion' ? CENTURION_SCHEDULE : PDC_SCHEDULE;
   const season = currentSeason();
-  const centurionSeason = getTouSeasonForMonth(new Date().getMonth() + 1);
+  const activeSeason = getTouSeasonForMonth(new Date().getMonth() + 1);
   const displayLabel = siteId === 'all'
     ? `${siteLabel} (showing ${tariffSite === 'centurion' ? 'Centurion' : 'PDC'} tariff)`
     : siteLabel;
@@ -154,27 +154,33 @@ const TouInfoButton: React.FC = () => {
                     ].map((row) => (
                       <tr key={row.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
                         <td style={{ padding: '8px 0', color: row.color, fontWeight: 600 }}>{row.label}</td>
-                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: centurionSeason === 'summer' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.summer[row.key].toFixed(4)}</td>
-                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: centurionSeason === 'winter' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.winter[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'summer' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.summer[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'winter' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.winter[row.key].toFixed(4)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: 18 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ padding: '6px 0', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: 600 }}>Charge</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>Low Demand</th>
+                      <th style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>High Demand</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '8px 0', color: PERIOD_COLORS.Peak, fontWeight: 600 }}>Peak</td>
-                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.peak.toFixed(4)}</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '8px 0', color: PERIOD_COLORS.Standard, fontWeight: 600 }}>Standard</td>
-                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.standard.toFixed(4)}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '8px 0', color: PERIOD_COLORS['Off-Peak'], fontWeight: 600 }}>Off-Peak</td>
-                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.rates.offpeak.toFixed(4)}</td>
-                    </tr>
+                    {[
+                      { label: 'Peak', key: 'peak' as const, color: PERIOD_COLORS.Peak },
+                      { label: 'Standard', key: 'standard' as const, color: PERIOD_COLORS.Standard },
+                      { label: 'Off-Peak', key: 'offpeak' as const, color: PERIOD_COLORS['Off-Peak'] },
+                    ].map((row) => (
+                      <tr key={row.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
+                        <td style={{ padding: '8px 0', color: row.color, fontWeight: 600 }}>{row.label}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'summer' ? 700 : 600 }}>R {PDC_TOU_RATES_BY_SEASON.summer[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'winter' ? 700 : 600 }}>R {PDC_TOU_RATES_BY_SEASON.winter[row.key].toFixed(4)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
@@ -189,6 +195,12 @@ const TouInfoButton: React.FC = () => {
                     <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{cfg.fixedDemandChargeExclVat == null ? 'Rate per kVA (chargeable demand)' : 'Monthly demand'}</td>
                     <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {(cfg.fixedDemandChargeExclVat ?? cfg.demandRatePerKva).toFixed(2)}</td>
                   </tr>
+                  {cfg.demandChargeComponents?.map((component) => (
+                    <tr key={component.label}>
+                      <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{component.label}</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {component.rate.toFixed(2)} / {component.unit.replace('R/', '')}</td>
+                    </tr>
+                  ))}
                   <tr>
                     <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>Monthly service</td>
                     <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {cfg.serviceChargeExclVat.toFixed(2)}</td>

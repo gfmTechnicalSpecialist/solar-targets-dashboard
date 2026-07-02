@@ -24,15 +24,27 @@ export interface TouRates {
 
 export type TouSeason = 'summer' | 'winter';
 
-/** Parc du Cap TOU rates — City of Cape Town 2025/26 MV TOU, low demand season. */
-export const PDC_TOU_RATES: TouRates = {
-  peak: 3.3396,     // 333.96 c/kWh
-  standard: 2.1708, // 217.08 c/kWh
-  offpeak: 1.7563,  // 175.63 c/kWh
+export const PDC_TOU_RATES_BY_SEASON: Record<TouSeason, TouRates> = {
+  summer: {
+    peak: 3.3396,
+    standard: 2.1708,
+    offpeak: 1.7563,
+  },
+  winter: {
+    peak: 7.0691,
+    standard: 2.2878,
+    offpeak: 1.7563,
+  },
 };
 
+/** Parc du Cap TOU rates — City of Cape Town 2025/26 MV TOU, low demand season. */
+export const PDC_TOU_RATES: TouRates = PDC_TOU_RATES_BY_SEASON.summer;
+
+export const PDC_ENERGY_DEMAND_RATE_PER_KVA = 75.89;
+export const PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD = 17.47;
+
 /** Monthly CoCT MV TOU demand charge rate for Parc du Cap (R/kVA) — 2025/26 Low Demand season: R75.89 energy demand + R17.47 network capacity */
-export const PDC_DEMAND_RATE_PER_KVA = 93.36;
+export const PDC_DEMAND_RATE_PER_KVA = PDC_ENERGY_DEMAND_RATE_PER_KVA + PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD;
 
 /** Monthly demand charge rate for Centurion (R/kVA). */
 export const CENTURION_DEMAND_RATE_PER_KVA = 0;
@@ -49,8 +61,8 @@ export const CENTURION_SERVICE_CHARGE_INCL_VAT = 411.77;
  * Billed regardless of consumption (Large Power Users — TOU category).
  * Source: City of Cape Town Service Charges schedule.
  */
-export const SERVICE_CHARGE_EXCL_VAT = 4_669.31;  // R/month
-export const SERVICE_CHARGE_INCL_VAT = 5_369.70;  // R/month (15% VAT included)
+export const SERVICE_CHARGE_EXCL_VAT = 2_404.57;  // R/month
+export const SERVICE_CHARGE_INCL_VAT = 2_765.26;  // R/month (15% VAT included)
 export const SERVICE_CHARGE_VAT_RATE = 0.15;
 
 export interface DemandBreakdown {
@@ -87,6 +99,7 @@ export interface TouConfig {
   demandRatePerKva: number;
   serviceChargeExclVat: number;
   serviceChargeInclVat: number;
+  demandChargeComponents?: Array<{ label: string; rate: number; unit: string }>;
   fixedDemandChargeExclVat?: number;
   season?: TouSeason;
 }
@@ -187,6 +200,11 @@ export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
     demandRatePerKva: PDC_DEMAND_RATE_PER_KVA,
     serviceChargeExclVat: SERVICE_CHARGE_EXCL_VAT,
     serviceChargeInclVat: SERVICE_CHARGE_INCL_VAT,
+    demandChargeComponents: [
+      { label: 'Energy demand', rate: PDC_ENERGY_DEMAND_RATE_PER_KVA, unit: 'R/kVA' },
+      { label: 'Network capacity', rate: PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD, unit: 'R/kVA NMD' },
+    ],
+    season: 'summer',
   },
   centurion: {
     rates: CENTURION_TOU_RATES,
@@ -200,8 +218,9 @@ export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
 };
 
 export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 1): TouConfig {
+  const season = getTouSeasonForMonth(month);
+
   if (siteId === 'centurion') {
-    const season = getTouSeasonForMonth(month);
     return {
       ...TOU_CONFIG_BY_SITE.centurion,
       rates: CENTURION_TOU_RATES_BY_SEASON[season],
@@ -209,7 +228,11 @@ export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 
     };
   }
 
-  return TOU_CONFIG_BY_SITE[siteId];
+  return {
+    ...TOU_CONFIG_BY_SITE['parc-du-cap'],
+    rates: PDC_TOU_RATES_BY_SEASON[season],
+    season,
+  };
 }
 
 export interface HourlyEnergyPoint {
