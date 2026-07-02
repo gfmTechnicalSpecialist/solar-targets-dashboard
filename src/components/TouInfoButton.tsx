@@ -7,7 +7,7 @@ import { CENTURION_TOU_RATES_BY_SEASON, PDC_TOU_RATES_BY_SEASON, getTouConfig, g
 type ScheduleRow = { period: 'Peak' | 'Standard' | 'Off-Peak'; hours: string };
 type DaySchedule = { day: string; rows: ScheduleRow[] };
 
-const PDC_SCHEDULE: DaySchedule[] = [
+const LOW_DEMAND_SCHEDULE: DaySchedule[] = [
   { day: 'Weekdays (Mon–Fri)', rows: [
     { period: 'Peak',     hours: '07:00–09:00, 18:00–21:00' },
     { period: 'Standard', hours: '06:00–07:00, 09:00–18:00, 21:00–22:00' },
@@ -23,18 +23,19 @@ const PDC_SCHEDULE: DaySchedule[] = [
   ]},
 ];
 
-const CENTURION_SCHEDULE: DaySchedule[] = [
+const HIGH_DEMAND_SCHEDULE: DaySchedule[] = [
   { day: 'Weekdays (Mon-Fri)', rows: [
     { period: 'Peak',     hours: '06:00-08:00, 17:00-20:00' },
     { period: 'Standard', hours: '08:00-17:00, 20:00-22:00' },
     { period: 'Off-Peak', hours: '22:00-06:00' },
   ]},
   { day: 'Saturday', rows: [
-    { period: 'Standard', hours: '07:00-12:00, 17:00-19:00' },
+    { period: 'Standard', hours: '07:00-12:00, 18:00-20:00' },
     { period: 'Off-Peak', hours: 'all other hours' },
   ]},
   { day: 'Sunday', rows: [
-    { period: 'Off-Peak', hours: 'all day' },
+    { period: 'Standard', hours: '17:00-19:00' },
+    { period: 'Off-Peak', hours: 'all other hours' },
   ]},
 ];
 
@@ -57,9 +58,9 @@ const TouInfoButton: React.FC = () => {
   const tariffSite: 'parc-du-cap' | 'centurion' =
     siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
   const cfg = getTouConfig(tariffSite);
-  const schedule = tariffSite === 'centurion' ? CENTURION_SCHEDULE : PDC_SCHEDULE;
   const season = currentSeason();
   const activeSeason = getTouSeasonForMonth(new Date().getMonth() + 1);
+  const schedule = tariffSite === 'centurion' && activeSeason === 'winter' ? HIGH_DEMAND_SCHEDULE : LOW_DEMAND_SCHEDULE;
   const displayLabel = siteId === 'all'
     ? `${siteLabel} (showing ${tariffSite === 'centurion' ? 'Centurion' : 'PDC'} tariff)`
     : siteLabel;
@@ -195,6 +196,12 @@ const TouInfoButton: React.FC = () => {
                     <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{cfg.fixedDemandChargeExclVat == null ? 'Rate per kVA (chargeable demand)' : 'Monthly demand'}</td>
                     <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>R {(cfg.fixedDemandChargeExclVat ?? cfg.demandRatePerKva).toFixed(2)}</td>
                   </tr>
+                  {cfg.minimumDemandKva != null && (
+                    <tr>
+                      <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>Minimum demand charged</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }}>{cfg.minimumDemandKva.toFixed(0)} kVA</td>
+                    </tr>
+                  )}
                   {cfg.demandChargeComponents?.map((component) => (
                     <tr key={component.label}>
                       <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{component.label}</td>
@@ -210,7 +217,7 @@ const TouInfoButton: React.FC = () => {
 
               {/* Schedule */}
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
-                TOU Schedule (SAST, UTC+2)
+                TOU Schedule (SAST, UTC+2) · {cfg.touPeriodSourceLabel}
               </div>
               {schedule.map((day) => (
                 <div key={day.day} style={{ marginBottom: 12 }}>

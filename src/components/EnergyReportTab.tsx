@@ -590,7 +590,7 @@ function generatePdf(data: ReportData) {
   kpiTile(margin + (tileW + 2) * 2,   tileW, 'Bill (with PV)', fmtR(inclTotal),                 'excl. VAT',                        GREEN);
   kpiTile(margin + (tileW + 2) * 3,   tileW,
     totalSavings != null ? 'Bill Saving' : 'Demand Peak',
-    totalSavings != null ? fmtR(totalSavings) : (data.demand ? `${data.demand.peakKva} kVA` : '—'),
+    totalSavings != null ? fmtR(totalSavings) : (data.demand ? `${data.demand.chargeableKva ?? data.demand.peakKva} kVA` : '—'),
     totalSavings != null ? `${savingsPct!.toFixed(1)}% of grid-only bill` : 'peak apparent power',
     totalSavings != null ? GREEN : AMBER,
   );
@@ -744,7 +744,7 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       halfRow(margin, halfW, [
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
-        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: margin + halfW - 48, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${(data.demand.chargeableKva ?? data.demand.peakKva).toFixed(1)} kVA` : '1 month', x: margin + halfW - 48, align: 'right' },
         { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(2) : 'fixed', x: margin + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + halfW, align: 'right', bold: true },
       ], false);
@@ -784,7 +784,7 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       halfRow(col2X, halfW, [
         { text: 'Demand', x: col2X + 3, align: 'left', bold: true },
-        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: col2X + halfW - 48, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${(data.demand.chargeableKva ?? data.demand.peakKva).toFixed(1)} kVA` : '1 month', x: col2X + halfW - 48, align: 'right' },
         { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(2) : 'fixed', x: col2X + halfW - 26, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: col2X + halfW, align: 'right', bold: true },
       ], false);
@@ -834,7 +834,7 @@ function generatePdf(data: ReportData) {
     if (data.demand) {
       tableRow([
         { text: 'Demand', x: margin + 3, align: 'left', bold: true },
-        { text: siteConfig.fixedDemandChargeExclVat == null ? `${data.demand.peakKva.toFixed(1)} kVA` : '1 month', x: margin + contentW - 84, align: 'right' },
+        { text: siteConfig.fixedDemandChargeExclVat == null ? `${(data.demand.chargeableKva ?? data.demand.peakKva).toFixed(1)} kVA` : '1 month', x: margin + contentW - 84, align: 'right' },
         { text: siteConfig.fixedDemandChargeExclVat == null ? siteDemandRate.toFixed(4) : 'fixed', x: margin + contentW - 52, align: 'right' },
         { text: data.demand.demandCharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x: margin + contentW - 2, align: 'right', bold: true },
       ], false);
@@ -1138,7 +1138,7 @@ const EnergyReportTab: React.FC = () => {
 
   const canFetch = !!user?.token && (siteId === 'parc-du-cap' || siteId === 'centurion');
   const selectedTariffNote = siteId === 'centurion'
-    ? 'Rates: City of Tshwane 11kV Supply Scale TOU SEM. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.'
+    ? 'Rates: City of Tshwane 11kV Supply Scale TOU. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.'
     : 'Rates: City of Cape Town 2025/26 MV TOU. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.';
   const lastReportMonth = lastReport ? parseInt(lastReport.monthKey.split('-')[1], 10) : null;
   const lastReportConfig = lastReport && lastReportMonth ? getTouConfig(lastReport.siteId, lastReportMonth) : null;
@@ -1191,7 +1191,7 @@ const EnergyReportTab: React.FC = () => {
       const touConfig = getTouConfig(site, month);
       const included = calculateTouCharges(hourlyGrid, touConfig);
       const excluded = loadPoints ? calculateTouCharges(loadPoints, touConfig) : null;
-      const demand = peakKva != null || touConfig.fixedDemandChargeExclVat != null
+      const demand = peakKva != null || touConfig.fixedDemandChargeExclVat != null || touConfig.minimumDemandKva != null
         ? calculateDemandCharge(peakKva ?? 0, touConfig)
         : null;
       const solarGenerationKwh = dailyProd

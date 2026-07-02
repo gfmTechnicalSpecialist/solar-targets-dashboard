@@ -62,7 +62,7 @@ const LiveTouTable: React.FC<{
             <td style={{ padding: '6px 8px', color: 'var(--text-primary)', fontWeight: 600 }}>Demand</td>
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>
               {fixedDemandChargeExclVat == null && demand
-                ? `${demand.peakKva.toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA`
+                ? `${(demand.chargeableKva ?? demand.peakKva).toLocaleString('en-ZA', { minimumFractionDigits: 1 })} kVA`
                 : '1 month'}
             </td>
             <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{fixedDemandChargeExclVat == null ? demandRatePerKva.toFixed(4) : 'fixed'}</td>
@@ -274,7 +274,7 @@ const TariffStatsCard: React.FC = () => {
         setLiveBreakdown(calculateTouCharges(hourlyPoints, touConfig));
         if (peakKva != null) {
           setDemandBreakdown(calculateDemandCharge(peakKva, touConfig));
-        } else if (touConfig.fixedDemandChargeExclVat != null) {
+        } else if (touConfig.fixedDemandChargeExclVat != null || touConfig.minimumDemandKva != null) {
           setDemandBreakdown(calculateDemandCharge(0, touConfig));
         }
         if (loadPoints != null) {
@@ -302,6 +302,9 @@ const TariffStatsCard: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: activeTouConfig.season === 'winter' ? 'rgba(59,130,246,0.12)' : 'rgba(245,158,11,0.14)', color: activeTouConfig.season === 'winter' ? 'var(--info)' : 'var(--warning)' }}>
               {seasonLabel}
+            </span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: 'rgba(245,158,11,0.18)', color: 'var(--warning)' }}>
+              TOU classification: {activeTouConfig.touClassificationLabel} · Periods: {activeTouConfig.touPeriodSourceLabel}
             </span>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{tariffLabel}</span>
           </div>

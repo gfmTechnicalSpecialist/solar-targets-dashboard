@@ -47,14 +47,14 @@ export const PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD = 17.47;
 export const PDC_DEMAND_RATE_PER_KVA = PDC_ENERGY_DEMAND_RATE_PER_KVA + PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD;
 
 /** Monthly demand charge rate for Centurion (R/kVA). */
-export const CENTURION_DEMAND_RATE_PER_KVA = 0;
+export const CENTURION_DEMAND_RATE_PER_KVA = 358.06;
 
-/** Centurion SEM monthly demand charge (fixed monthly charge, excl. VAT). */
-export const CENTURION_MONTHLY_DEMAND_CHARGE_EXCL_VAT = 4_321.63;
+/** Centurion minimum demand charged where recorded readings are below 140 kVA. */
+export const CENTURION_MINIMUM_DEMAND_KVA = 140;
 
-/** Centurion SEM fixed monthly service charge (excl. VAT). */
-export const CENTURION_SERVICE_CHARGE_EXCL_VAT = 358.06;
-export const CENTURION_SERVICE_CHARGE_INCL_VAT = 411.77;
+/** Centurion fixed monthly service charge (excl. VAT). */
+export const CENTURION_SERVICE_CHARGE_EXCL_VAT = 4_321.63;
+export const CENTURION_SERVICE_CHARGE_INCL_VAT = 4_969.87;
 
 /**
  * CoCT 2025/26 MV TOU fixed monthly service charge.
@@ -68,9 +68,11 @@ export const SERVICE_CHARGE_VAT_RATE = 0.15;
 export interface DemandBreakdown {
   /** Maximum apparent power (kVA) recorded during the month */
   peakKva: number;
+  /** kVA used for billing after applying any minimum demand rule */
+  chargeableKva: number;
   /** Demand charge in Rand (peakKva × ratePerKva) */
   demandCharge: number;
-  /** Whether the charge was calculated from peak kVA or supplied as a fixed SEM monthly cost */
+  /** Whether the charge was calculated from peak kVA or supplied as a fixed monthly cost */
   chargeBasis: 'per-kva' | 'fixed-monthly';
 }
 
@@ -81,10 +83,13 @@ export function calculateDemandCharge(
 ): DemandBreakdown {
   const fixedMonthlyCharge = typeof rateOrConfig === 'number' ? undefined : rateOrConfig.fixedDemandChargeExclVat;
   const ratePerKva = typeof rateOrConfig === 'number' ? rateOrConfig : rateOrConfig.demandRatePerKva;
+  const minimumDemandKva = typeof rateOrConfig === 'number' ? undefined : rateOrConfig.minimumDemandKva;
+  const chargeableKva = fixedMonthlyCharge == null ? Math.max(peakKva, minimumDemandKva ?? 0) : peakKva;
 
   return {
     peakKva,
-    demandCharge: Math.round((fixedMonthlyCharge ?? peakKva * ratePerKva) * 100) / 100,
+    chargeableKva,
+    demandCharge: Math.round((fixedMonthlyCharge ?? chargeableKva * ratePerKva) * 100) / 100,
     chargeBasis: fixedMonthlyCharge == null ? 'per-kva' : 'fixed-monthly',
   };
 }
@@ -101,7 +106,10 @@ export interface TouConfig {
   serviceChargeInclVat: number;
   demandChargeComponents?: Array<{ label: string; rate: number; unit: string }>;
   fixedDemandChargeExclVat?: number;
+  minimumDemandKva?: number;
   season?: TouSeason;
+  touClassificationLabel: string;
+  touPeriodSourceLabel: string;
 }
 
 /**
@@ -160,7 +168,14 @@ export function getTouSeasonForMonth(month: number): TouSeason {
 }
 
 /**
- * Classify an hour into a TOU period for Centurion (high demand season schedule).
+ * Classify an hour into a TOU period for Centurion (low-demand season Eskom Municflex schedule).
+ */
+export function classifyCenturionLowDemandTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
+  return classifyTouPeriod(sastHour, dayOfWeek);
+}
+
+/**
+ * Classify an hour into a TOU period for Centurion (high-demand season Eskom Municflex schedule).
  *
  * Weekdays (Mon–Fri):
  *   Peak    : 06:00–08:00 and 17:00–20:00
@@ -168,26 +183,31 @@ export function getTouSeasonForMonth(month: number): TouSeason {
  *   Off-Peak: 22:00–06:00
  *
  * Saturday:
- *   Standard: 07:00–12:00 and 17:00–19:00
+ *   Standard: 07:00–12:00 and 18:00–20:00
  *   Off-Peak: all other hours
  *
  * Sunday:
- *   Off-Peak: all day
+ *   Standard: 17:00–19:00
+ *   Off-Peak: all other hours
  */
-export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
-  // Sunday — off-peak all day
-  if (dayOfWeek === 0) return 'offpeak';
-
-  // Saturday
-  if (dayOfWeek === 6) {
-    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 17 && sastHour < 19)) return 'standard';
+export function classifyCenturionHighDemandTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
+  if (dayOfWeek === 0) {
+    if (sastHour >= 17 && sastHour < 19) return 'standard';
     return 'offpeak';
   }
 
-  // Weekday
+  if (dayOfWeek === 6) {
+    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 18 && sastHour < 20)) return 'standard';
+    return 'offpeak';
+  }
+
   if ((sastHour >= 6 && sastHour < 8) || (sastHour >= 17 && sastHour < 20)) return 'peak';
   if ((sastHour >= 8 && sastHour < 17) || (sastHour >= 20 && sastHour < 22)) return 'standard';
   return 'offpeak';
+}
+
+export function classifyCenturionTouPeriod(sastHour: number, dayOfWeek: number): TouPeriod {
+  return classifyCenturionLowDemandTouPeriod(sastHour, dayOfWeek);
 }
 
 /** Per-site TOU configuration (rates + period classifier + demand/service charges). */
@@ -200,20 +220,24 @@ export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
     demandRatePerKva: PDC_DEMAND_RATE_PER_KVA,
     serviceChargeExclVat: SERVICE_CHARGE_EXCL_VAT,
     serviceChargeInclVat: SERVICE_CHARGE_INCL_VAT,
+    touClassificationLabel: 'Large User Medium Voltage Time of Use tariff',
     demandChargeComponents: [
       { label: 'Energy demand', rate: PDC_ENERGY_DEMAND_RATE_PER_KVA, unit: 'R/kVA' },
       { label: 'Network capacity', rate: PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD, unit: 'R/kVA NMD' },
     ],
     season: 'summer',
+    touPeriodSourceLabel: 'City of Cape Town 2025/26 MV TOU periods',
   },
   centurion: {
     rates: CENTURION_TOU_RATES,
-    classify: classifyCenturionTouPeriod,
+    classify: classifyCenturionLowDemandTouPeriod,
     demandRatePerKva: CENTURION_DEMAND_RATE_PER_KVA,
     serviceChargeExclVat: CENTURION_SERVICE_CHARGE_EXCL_VAT,
     serviceChargeInclVat: CENTURION_SERVICE_CHARGE_INCL_VAT,
-    fixedDemandChargeExclVat: CENTURION_MONTHLY_DEMAND_CHARGE_EXCL_VAT,
+    minimumDemandKva: CENTURION_MINIMUM_DEMAND_KVA,
     season: 'summer',
+    touClassificationLabel: '11 kV Supply Scale: Time of Use',
+    touPeriodSourceLabel: 'Current Eskom Municflex periods',
   },
 };
 
@@ -224,6 +248,7 @@ export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 
     return {
       ...TOU_CONFIG_BY_SITE.centurion,
       rates: CENTURION_TOU_RATES_BY_SEASON[season],
+      classify: season === 'winter' ? classifyCenturionHighDemandTouPeriod : classifyCenturionLowDemandTouPeriod,
       season,
     };
   }
@@ -231,6 +256,7 @@ export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 
   return {
     ...TOU_CONFIG_BY_SITE['parc-du-cap'],
     rates: PDC_TOU_RATES_BY_SEASON[season],
+    classify: classifyTouPeriod,
     season,
   };
 }

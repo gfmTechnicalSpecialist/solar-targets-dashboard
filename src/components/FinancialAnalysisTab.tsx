@@ -17,12 +17,13 @@ const FinancialAnalysisTab: React.FC = () => {
   const tariffConfig = selectedTariffSite ? getTouConfig(selectedTariffSite) : null;
   const tariffMeta = selectedTariffSite === 'centurion'
     ? {
-        badge: 'Tshwane 11kV TOU SEM',
+        badge: 'Tshwane 11kV TOU',
         classification: [
           { label: 'Utility', value: 'City of Tshwane' },
           { label: 'Category', value: '11kV Supply Scale TOU' },
           { label: 'Voltage Level', value: '11kV' },
           { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'Winter (Jun-Aug)' : 'Summer (Sep-May)' },
+          { label: 'TOU Period Source', value: tariffConfig?.touPeriodSourceLabel ?? '' },
         ],
       }
     : {
@@ -32,6 +33,7 @@ const FinancialAnalysisTab: React.FC = () => {
           { label: 'Category', value: 'Large Power User (TOU)' },
           { label: 'Voltage Level', value: 'Medium Voltage (MV)' },
           { label: 'Current Season', value: tariffConfig?.season === 'winter' ? 'High Demand (Jun-Aug)' : 'Low Demand (Sep-May)' },
+          { label: 'TOU Period Source', value: tariffConfig?.touPeriodSourceLabel ?? '' },
         ],
       };
   const demandComponentRows = tariffConfig?.demandChargeComponents?.map((component) => ({
@@ -39,6 +41,11 @@ const FinancialAnalysisTab: React.FC = () => {
     value: `R ${component.rate.toFixed(2)} / ${component.unit.replace('R/', '')}`,
     color: 'var(--text-primary)',
   })) ?? [];
+  const minimumDemandRow = tariffConfig?.minimumDemandKva == null ? [] : [{
+    label: 'Minimum demand charged',
+    value: `${tariffConfig.minimumDemandKva.toFixed(0)} kVA`,
+    color: 'var(--text-primary)',
+  }];
 
   return (
     <>
@@ -85,6 +92,7 @@ const FinancialAnalysisTab: React.FC = () => {
                       { label: 'Standard energy', value: `R ${tariffConfig.rates.standard.toFixed(4)} / kWh`, color: 'var(--warning)' },
                       { label: 'Off-peak energy', value: `R ${tariffConfig.rates.offpeak.toFixed(4)} / kWh`, color: 'var(--info)' },
                       { label: 'Demand', value: tariffConfig.fixedDemandChargeExclVat == null ? `R ${tariffConfig.demandRatePerKva.toFixed(2)} / kVA` : `R ${tariffConfig.fixedDemandChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
+                      ...minimumDemandRow,
                       ...demandComponentRows,
                       { label: 'Service charge', value: `R ${tariffConfig.serviceChargeExclVat.toLocaleString('en-ZA', { minimumFractionDigits: 2 })} / month`, color: 'var(--text-primary)' },
                     ].map(({ label, value, color }) => (
