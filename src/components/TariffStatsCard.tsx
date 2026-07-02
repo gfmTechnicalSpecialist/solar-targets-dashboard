@@ -7,8 +7,6 @@ import { fetchMonthlyGridEnergyHourly, fetchMonthlyLoadEnergyHourly, fetchMonthl
 import { calculateTouCharges, calculateDemandCharge, getTouConfig, TOU_CONFIG_BY_SITE } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown, TouConfig } from '../api/tou';
 
-const CURRENT_MONTH_KEY = '2026-05';
-
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -217,7 +215,7 @@ const TariffStatsCard: React.FC = () => {
   const { siteId } = useSite();
 
   const monthKeys = Object.keys(monthlyTariffData).sort();
-  const [selectedKey, setSelectedKey] = useState(CURRENT_MONTH_KEY);
+  const [selectedKey, setSelectedKey] = useState(monthKeys[monthKeys.length - 1] ?? '');
   const [liveBreakdown, setLiveBreakdown] = useState<TouBreakdown | null>(null);
   const [excludedBreakdown, setExcludedBreakdown] = useState<TouBreakdown | null>(null);
   const [demandBreakdown, setDemandBreakdown] = useState<DemandBreakdown | null>(null);

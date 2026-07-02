@@ -441,12 +441,13 @@ const generateTariffForMonth = (year: number, monthIdx: number): MonthlyTariffEn
   };
 };
 
-// Generate last 12 months ending at current month (May 2026)
+// Generate last 12 completed months for signed-out/mock tariff views.
 const buildMonthlyTariffData = (): Record<string, MonthlyTariffEntry> => {
   const result: Record<string, MonthlyTariffEntry> = {};
-  const now = new Date(2026, 4, 1); // May 2026
+  const now = new Date();
+  const endMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(endMonth.getFullYear(), endMonth.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     result[key] = generateTariffForMonth(d.getFullYear(), d.getMonth());
   }
