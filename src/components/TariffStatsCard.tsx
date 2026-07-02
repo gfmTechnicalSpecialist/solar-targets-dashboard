@@ -241,9 +241,13 @@ const TariffStatsCard: React.FC = () => {
   const tariffSite = siteId === 'centurion' || siteId === 'parc-du-cap' ? siteId : 'parc-du-cap';
   const activeTouConfig = Number.isNaN(selectedMonth) ? TOU_CONFIG_BY_SITE[tariffSite] : getTouConfig(tariffSite, selectedMonth);
   const seasonLabel = activeTouConfig.season === 'winter'
-    ? tariffSite === 'centurion' ? 'Winter / high demand (June-August)' : 'High demand (June-August)'
-    : tariffSite === 'centurion' ? 'Summer / low demand (September-May)' : 'Low demand (September-May)';
+    ? tariffSite === 'centurion' ? 'Winter' : 'High demand'
+    : tariffSite === 'centurion' ? 'Summer' : 'Low demand';
+  const seasonTitle = activeTouConfig.season === 'winter'
+    ? 'June-August high-demand season'
+    : 'September-May low-demand season';
   const tariffLabel = siteId === 'all' ? `PDC tariff shown for ${siteLabel}` : `${siteLabel} tariff`;
+  const classificationTitle = `${activeTouConfig.touClassificationLabel}\nPeriods: ${activeTouConfig.touPeriodSourceLabel}`;
 
   useEffect(() => {
     if (!canFetchLive) {
@@ -300,11 +304,11 @@ const TariffStatsCard: React.FC = () => {
             TOU charge breakdown — grid import classified by Peak / Standard / Off-Peak
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: activeTouConfig.season === 'winter' ? 'rgba(59,130,246,0.12)' : 'rgba(245,158,11,0.14)', color: activeTouConfig.season === 'winter' ? 'var(--info)' : 'var(--warning)' }}>
+            <span title={seasonTitle} style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: activeTouConfig.season === 'winter' ? 'rgba(59,130,246,0.12)' : 'rgba(245,158,11,0.14)', color: activeTouConfig.season === 'winter' ? 'var(--info)' : 'var(--warning)' }}>
               {seasonLabel}
             </span>
-            <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: 'rgba(245,158,11,0.18)', color: 'var(--warning)' }}>
-              TOU classification: {activeTouConfig.touClassificationLabel} · Periods: {activeTouConfig.touPeriodSourceLabel}
+            <span title={classificationTitle} style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: 'rgba(245,158,11,0.18)', color: 'var(--warning)' }}>
+              TOU
             </span>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{tariffLabel}</span>
           </div>
