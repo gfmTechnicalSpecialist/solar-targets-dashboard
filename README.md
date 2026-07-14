@@ -114,3 +114,5 @@ The dashboard currently uses mock data for demonstration. To integrate with real
 ## License
 
 This project is provided as-is for demonstration purposes.
+
+Test commit marker: updated on 2026-07-14.
