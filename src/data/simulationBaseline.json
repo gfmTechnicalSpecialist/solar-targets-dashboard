@@ -1,0 +1,16 @@
+{
+  "centurion": {
+    "01": { "simulatedLoadKwh": 847843, "simulatedSavedKwh": 387714 },
+    "02": { "simulatedLoadKwh": 827960, "simulatedSavedKwh": 363472 },
+    "03": { "simulatedLoadKwh": 967578, "simulatedSavedKwh": 392939 },
+    "04": { "simulatedLoadKwh": 969438, "simulatedSavedKwh": 359380 },
+    "05": { "simulatedLoadKwh": 1081981, "simulatedSavedKwh": 386060 },
+    "06": { "simulatedLoadKwh": 1144358, "simulatedSavedKwh": 365768 },
+    "07": { "simulatedLoadKwh": 1123530, "simulatedSavedKwh": 391889 },
+    "08": { "simulatedLoadKwh": 1043888, "simulatedSavedKwh": 412991 },
+    "09": { "simulatedLoadKwh": 992449, "simulatedSavedKwh": 424204 },
+    "10": { "simulatedLoadKwh": 1020438, "simulatedSavedKwh": 463510 },
+    "11": { "simulatedLoadKwh": 951471, "simulatedSavedKwh": 449837 },
+    "12": { "simulatedLoadKwh": 941225, "simulatedSavedKwh": 454099 }
+  }
+}

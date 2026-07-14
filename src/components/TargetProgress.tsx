@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
-import { Target, Loader2, Calendar } from 'lucide-react';
+import { Target, Loader2, Calendar, Gauge } from 'lucide-react';
 import { fetchDailyProduction, fetchDailyIrradiance, type DailyProductionPoint, type DailyIrradiancePoint } from '../api/higeco';
 import targetsConfig from '../data/targets.json';
+import simulationBaseline from '../data/simulationBaseline.json';
 
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -165,6 +166,21 @@ const TargetProgress: React.FC = () => {
   const selectedMonthName = monthLabelFromKey(selectedMonth);
   const prevMonthName     = monthLabelFromKey(prevMonth);
 
+  // --- System Performance (normalised vs simulation baseline) — Centurion only ---
+  // Simulated performance = Simulated Energy Saved ÷ Simulated Load
+  // Actual performance    = Actual Energy Saved ÷ Actual Load
+  // System Performance    = Actual performance ÷ Simulated performance
+  const baselineCfg = simulationBaseline as Record<string, Record<string, { simulatedLoadKwh: number; simulatedSavedKwh: number }>>;
+  const selMonthOfYear = selectedMonth.split('-')[1];
+  const simBaseline = siteId === 'centurion' ? baselineCfg['centurion']?.[selMonthOfYear] : undefined;
+  const actualLoadKwh  = Math.round(selectedMonthData.reduce((s, d) => s + d.loadKwh, 0));
+  const actualSavedKwh = Math.round(selectedMonthProduction);
+  const simPerf = simBaseline && simBaseline.simulatedLoadKwh > 0
+    ? simBaseline.simulatedSavedKwh / simBaseline.simulatedLoadKwh : null;
+  const actPerf = actualLoadKwh > 0 ? actualSavedKwh / actualLoadKwh : null;
+  const systemPerf = simPerf !== null && actPerf !== null ? (actPerf / simPerf) * 100 : null;
+  const systemPerfClamped = systemPerf !== null ? Math.min(systemPerf, 100) : 0;
+
   return (
     <div className="tp-wrapper">
       {/* Header row */}
@@ -273,6 +289,41 @@ const TargetProgress: React.FC = () => {
             <div className="tp-card-empty">No data available</div>
           )}
         </div>
+
+        {/* Card 3: System Performance vs simulation baseline (Centurion only) */}
+        {siteId === 'centurion' && simBaseline && (
+          <div className="tp-card">
+            <div className="tp-card-header">
+              <div className="tp-card-title">
+                <Gauge size={14} />
+                <span>{selectedMonthName} System Performance</span>
+              </div>
+              <span className="tp-bar-badge tp-bar-badge--current">vs simulation</span>
+            </div>
+            {systemPerf !== null ? (
+              <>
+                <div className={`tp-card-value ${systemPerf >= 95 ? 'tp-card-value--green' : 'tp-card-value--amber'}`}>
+                  {(Math.floor(systemPerf * 10) / 10).toFixed(1)}%
+                </div>
+                <div className="tp-track">
+                  <div
+                    className={`tp-fill ${systemPerf >= 95 ? 'tp-fill--green' : 'tp-fill--amber'}`}
+                    style={{ width: `${systemPerfClamped}%` }}
+                  />
+                </div>
+                <div className="tp-card-detail">
+                  <span>Actual {actualSavedKwh.toLocaleString()} / {actualLoadKwh.toLocaleString()} kWh = {actPerf !== null ? (actPerf * 100).toFixed(1) : '—'}%</span>
+                  <span className="tp-bar-separator">·</span>
+                  <span className="tp-bar-target">
+                    Simulated {simBaseline.simulatedSavedKwh.toLocaleString()} / {simBaseline.simulatedLoadKwh.toLocaleString()} kWh = {simPerf !== null ? (simPerf * 100).toFixed(1) : '—'}%
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="tp-card-empty">No load data available</div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>
