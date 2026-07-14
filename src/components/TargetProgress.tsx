@@ -181,6 +181,17 @@ const TargetProgress: React.FC = () => {
   const systemPerf = simPerf !== null && actPerf !== null ? (actPerf / simPerf) * 100 : null;
   const systemPerfClamped = systemPerf !== null ? Math.min(systemPerf, 100) : 0;
 
+  // Previous month system performance
+  const prevMonthOfYear = prevMonth.split('-')[1];
+  const prevSimBaseline = siteId === 'centurion' ? baselineCfg['centurion']?.[prevMonthOfYear] : undefined;
+  const prevActualLoadKwh  = Math.round(prevMonthData.reduce((s, d) => s + d.loadKwh, 0));
+  const prevActualSavedKwh = Math.round(prevMonthProduction);
+  const prevSimPerf = prevSimBaseline && prevSimBaseline.simulatedLoadKwh > 0
+    ? prevSimBaseline.simulatedSavedKwh / prevSimBaseline.simulatedLoadKwh : null;
+  const prevActPerf = prevActualLoadKwh > 0 ? prevActualSavedKwh / prevActualLoadKwh : null;
+  const prevSystemPerf = prevSimPerf !== null && prevActPerf !== null ? (prevActPerf / prevSimPerf) * 100 : null;
+  const prevSystemPerfClamped = prevSystemPerf !== null ? Math.min(prevSystemPerf, 100) : 0;
+
   return (
     <div className="tp-wrapper">
       {/* Header row */}
@@ -246,12 +257,12 @@ const TargetProgress: React.FC = () => {
             <span>{selectedMonthProduction.toLocaleString()} kWh</span>
             <span className="tp-bar-separator">/</span>
             <span className="tp-bar-target">{monthlyTarget.toLocaleString()} kWh</span>
+            {avgIrrSelected !== null && (
+              <span style={{ padding: '2px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+                ☀ {avgIrrSelected} kWh/m² avg irradiance
+              </span>
+            )}
           </div>
-          {avgIrrSelected !== null && (
-            <div style={{ padding: '4px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
-              ☀ {avgIrrSelected} kWh/m² avg irradiance
-            </div>
-          )}
         </div>
 
         {/* Card 2: Previous Month Progress */}
@@ -278,12 +289,12 @@ const TargetProgress: React.FC = () => {
                 <span>{prevMonthProduction.toLocaleString()} kWh</span>
                 <span className="tp-bar-separator">/</span>
                 <span className="tp-bar-target">{prevMonthTarget.toLocaleString()} kWh</span>
+                {avgIrrPrev !== null && (
+                  <span style={{ padding: '2px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+                    ☀ {avgIrrPrev} kWh/m² avg irradiance
+                  </span>
+                )}
               </div>
-              {avgIrrPrev !== null && (
-                <div style={{ padding: '4px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: 6, fontSize: '0.72rem', color: 'var(--chart-production)', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
-                  ☀ {avgIrrPrev} kWh/m² avg irradiance
-                </div>
-              )}
             </>
           ) : (
             <div className="tp-card-empty">No data available</div>
@@ -316,6 +327,41 @@ const TargetProgress: React.FC = () => {
                   <span className="tp-bar-separator">·</span>
                   <span className="tp-bar-target">
                     Simulated {simBaseline.simulatedSavedKwh.toLocaleString()} / {simBaseline.simulatedLoadKwh.toLocaleString()} kWh = {simPerf !== null ? (simPerf * 100).toFixed(1) : '—'}%
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="tp-card-empty">No load data available</div>
+            )}
+          </div>
+        )}
+
+        {/* Card 4: Previous Month System Performance (Centurion only) */}
+        {siteId === 'centurion' && prevSimBaseline && (
+          <div className="tp-card">
+            <div className="tp-card-header">
+              <div className="tp-card-title">
+                <Gauge size={14} />
+                <span>{prevMonthName} System Performance</span>
+              </div>
+              <span className="tp-bar-badge tp-bar-badge--last">vs simulation</span>
+            </div>
+            {prevSystemPerf !== null && prevMonthData.length > 0 ? (
+              <>
+                <div className={`tp-card-value ${prevSystemPerf >= 95 ? 'tp-card-value--green' : 'tp-card-value--amber'}`}>
+                  {(Math.floor(prevSystemPerf * 10) / 10).toFixed(1)}%
+                </div>
+                <div className="tp-track">
+                  <div
+                    className={`tp-fill ${prevSystemPerf >= 95 ? 'tp-fill--green' : 'tp-fill--amber'}`}
+                    style={{ width: `${prevSystemPerfClamped}%` }}
+                  />
+                </div>
+                <div className="tp-card-detail">
+                  <span>Actual {prevActualSavedKwh.toLocaleString()} / {prevActualLoadKwh.toLocaleString()} kWh = {prevActPerf !== null ? (prevActPerf * 100).toFixed(1) : '—'}%</span>
+                  <span className="tp-bar-separator">·</span>
+                  <span className="tp-bar-target">
+                    Simulated {prevSimBaseline.simulatedSavedKwh.toLocaleString()} / {prevSimBaseline.simulatedLoadKwh.toLocaleString()} kWh = {prevSimPerf !== null ? (prevSimPerf * 100).toFixed(1) : '—'}%
                   </span>
                 </div>
               </>
