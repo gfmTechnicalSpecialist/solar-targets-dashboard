@@ -2268,3 +2268,104 @@
     display: none;
   }
 }
+
+/* ============================================
+   POWER BI REPORT STYLING
+   Flat, tile-based visual chrome inspired by
+   Power BI reports. Keeps all Momentum colors,
+   only refines the shape, spacing and chrome.
+   ============================================ */
+
+/* Report canvas — tighter, grid-aligned padding */
+.dashboard-page {
+  padding: 16px;
+}
+
+/* Denser, grid-aligned tile gaps (Power BI uses ~8-12px gutters) */
+.metrics-layout,
+.metrics-main-grid,
+.metrics-side-grid,
+.detail-grid,
+.secondary-grid,
+.metrics-layout-v2,
+.metrics-top-row,
+.metrics-top-row--two,
+.metrics-bottom-row,
+.overview-kpi-grid,
+.overview-panels,
+.tp-grid,
+.chart-summary,
+.footer-stats {
+  gap: 12px;
+}
+
+/* Visual tiles — square corners, defined border, subtle uniform shadow */
+.mini-panel,
+.metric-card,
+.chart-card,
+.overview-kpi-tile,
+.csv-card,
+.overview-status-bar,
+.no-cards-state {
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  box-shadow: 0 1px 3px rgba(6, 12, 64, 0.08), 0 1px 2px rgba(6, 12, 64, 0.04);
+}
+
+/* Flat, clean visual title bar (Power BI visual header) */
+.metric-card h3,
+.chart-card h3,
+.mini-panel h3 {
+  margin: -20px -20px 16px;
+  padding: 11px 38px 11px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.metric-card h3 {
+  font-size: 0.85rem;
+}
+
+/* Static tiles — remove the modern "lift" hover for a flat report feel */
+.overview-kpi-tile:hover,
+.csv-card:hover,
+.tp-card:hover {
+  transform: none;
+  border-color: var(--border-default);
+  box-shadow: 0 2px 6px rgba(6, 12, 64, 0.12);
+}
+
+/* Inner tiles / KPI blocks — square them up to match */
+.tp-card,
+.autarky-card,
+.chart-summary-item,
+.overview-kpi-icon,
+.csv-card-icon,
+.metric-stat-icon {
+  border-radius: 6px;
+}
+
+.managed-card-close {
+  border-radius: 4px;
+}
+
+/* Progress bars — flat Power BI fills (no glow / no shimmer sweep) */
+.progress-track,
+.tp-track {
+  border-radius: 3px;
+}
+
+.progress-fill,
+.tp-fill {
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.progress-fill::after,
+.tp-fill::after {
+  display: none;
+}
