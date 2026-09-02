@@ -19,6 +19,7 @@ import {
   getTouConfig,
 } from '../api/tou';
 import type { TouBreakdown, DemandBreakdown } from '../api/tou';
+import { buildTariffMonthKeys } from '../data/mockData';
 import targets from '../data/targets.json';
 
 // ---------------------------------------------------------------------------
@@ -55,22 +56,7 @@ function fmtKwh(n: number) {
 // Available month keys (current month and earlier, same list as TariffStatsCard)
 // ---------------------------------------------------------------------------
 
-function buildMonthKeys(): string[] {
-  const keys: string[] = [];
-  const now = new Date();
-  // Exclude the current (incomplete) month — stop at the previous completed month
-  const maxYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-  const maxMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // getMonth() is 0-based, so this gives last month
-  for (let y = 2025; y <= maxYear; y++) {
-    const mLimit = y === maxYear ? maxMonth : 12;
-    for (let m = 1; m <= mLimit; m++) {
-      keys.push(`${y}-${String(m).padStart(2, '0')}`);
-    }
-  }
-  return keys;
-}
-
-const MONTH_KEYS = buildMonthKeys();
+const MONTH_KEYS = buildTariffMonthKeys();
 const DEFAULT_KEY = MONTH_KEYS[MONTH_KEYS.length - 1];
 
 // ---------------------------------------------------------------------------

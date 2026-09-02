@@ -375,6 +375,7 @@ export interface MonthlyTariffEntry {
 
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const TARIFF_DATA_START_YEAR = 2025;
 
 // Rates are fixed (tariff schedule)
 const RATES = {
@@ -441,15 +442,29 @@ const generateTariffForMonth = (year: number, monthIdx: number): MonthlyTariffEn
   };
 };
 
-// Generate last 12 completed months for signed-out/mock tariff views.
+export const buildTariffMonthKeys = (): string[] => {
+  const keys: string[] = [];
+  const now = new Date();
+  const maxYear = now.getFullYear();
+  const maxMonth = now.getMonth() + 1;
+
+  for (let year = TARIFF_DATA_START_YEAR; year <= maxYear; year++) {
+    const monthLimit = year === maxYear ? maxMonth : 12;
+    for (let month = 1; month <= monthLimit; month++) {
+      keys.push(`${year}-${String(month).padStart(2, '0')}`);
+    }
+  }
+
+  return keys;
+};
+
 const buildMonthlyTariffData = (): Record<string, MonthlyTariffEntry> => {
   const result: Record<string, MonthlyTariffEntry> = {};
-  const now = new Date();
-  const endMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(endMonth.getFullYear(), endMonth.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    result[key] = generateTariffForMonth(d.getFullYear(), d.getMonth());
+  for (const key of buildTariffMonthKeys()) {
+    const [yearStr, monthStr] = key.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIdx = parseInt(monthStr, 10) - 1;
+    result[key] = generateTariffForMonth(year, monthIdx);
   }
   return result;
 };
