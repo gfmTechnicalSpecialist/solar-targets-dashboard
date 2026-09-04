@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Info, X } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
-import { CENTURION_TOU_RATES_BY_SEASON, PDC_TOU_RATES_BY_SEASON, getTouConfig, getTouSeasonForMonth } from '../api/tou';
+import { getCenturionTouRatesBySeason, PDC_TOU_RATES_BY_SEASON, getTouConfig, getTouSeasonForMonth } from '../api/tou';
 
 // ── Schedule data (mirrors classifiers in src/api/tou.ts) ─────────────────────
 type ScheduleRow = { period: 'Peak' | 'Standard' | 'Off-Peak'; hours: string };
@@ -58,6 +58,8 @@ const TouInfoButton: React.FC = () => {
   const tariffSite: 'parc-du-cap' | 'centurion' =
     siteId === 'centurion' ? 'centurion' : 'parc-du-cap';
   const cfg = getTouConfig(tariffSite);
+  const now = new Date();
+  const centurionSeasonRates = getCenturionTouRatesBySeason(now.getFullYear(), now.getMonth() + 1);
   const season = currentSeason();
   const activeSeason = getTouSeasonForMonth(new Date().getMonth() + 1);
   const schedule = tariffSite === 'centurion' && activeSeason === 'winter' ? HIGH_DEMAND_SCHEDULE : LOW_DEMAND_SCHEDULE;
@@ -118,7 +120,7 @@ const TouInfoButton: React.FC = () => {
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Tariff & TOU Information</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {displayLabel} · {season} season
+                  {displayLabel} · {season} season{cfg.tariffYearLabel ? ` · ${cfg.tariffYearLabel}` : ''}
                 </div>
               </div>
               <button
@@ -155,8 +157,8 @@ const TouInfoButton: React.FC = () => {
                     ].map((row) => (
                       <tr key={row.label} style={{ borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
                         <td style={{ padding: '8px 0', color: row.color, fontWeight: 600 }}>{row.label}</td>
-                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'summer' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.summer[row.key].toFixed(4)}</td>
-                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'winter' ? 700 : 600 }}>R {CENTURION_TOU_RATES_BY_SEASON.winter[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'summer' ? 700 : 600 }}>R {centurionSeasonRates.summer[row.key].toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: activeSeason === 'winter' ? 700 : 600 }}>R {centurionSeasonRates.winter[row.key].toFixed(4)}</td>
                       </tr>
                     ))}
                   </tbody>

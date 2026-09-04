@@ -424,6 +424,7 @@ function generatePdf(data: ReportData) {
 
   const month = data.monthKey;
   const reportMonth = parseInt(month.split('-')[1], 10);
+  const reportYear = parseInt(month.split('-')[0], 10);
   const label = monthLabel(month);
   const generatedAt = new Date().toLocaleString('en-ZA', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -431,7 +432,7 @@ function generatePdf(data: ReportData) {
   });
 
   // Site-specific TOU rates for displayed rate columns
-  const siteConfig = getTouConfig(data.siteId, reportMonth);
+  const siteConfig = getTouConfig(data.siteId, reportMonth, reportYear);
   const siteRates = siteConfig.rates;
   const siteDemandRate = siteConfig.demandRatePerKva;
 
@@ -1124,10 +1125,13 @@ const EnergyReportTab: React.FC = () => {
 
   const canFetch = !!user?.token && (siteId === 'parc-du-cap' || siteId === 'centurion');
   const selectedTariffNote = siteId === 'centurion'
-    ? 'Rates: City of Tshwane 11kV Supply Scale TOU. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.'
+    ? `Rates: City of Tshwane 11kV Supply Scale TOU (${getTouConfig('centurion').tariffYearLabel ?? ''}). All charges exclude VAT unless stated. PDF includes VAT reconciliation line.`
     : 'Rates: City of Cape Town 2025/26 MV TOU. All charges exclude VAT unless stated. PDF includes VAT reconciliation line.';
   const lastReportMonth = lastReport ? parseInt(lastReport.monthKey.split('-')[1], 10) : null;
-  const lastReportConfig = lastReport && lastReportMonth ? getTouConfig(lastReport.siteId, lastReportMonth) : null;
+  const lastReportYear = lastReport ? parseInt(lastReport.monthKey.split('-')[0], 10) : null;
+  const lastReportConfig = lastReport && lastReportMonth != null && lastReportYear != null
+    ? getTouConfig(lastReport.siteId, lastReportMonth, lastReportYear)
+    : null;
   const lastReportBillWithPv = lastReport && lastReportConfig
     ? r2(lastReport.included.totalCharge + (lastReport.demand?.demandCharge ?? lastReportConfig.fixedDemandChargeExclVat ?? 0) + lastReportConfig.serviceChargeExclVat)
     : 0;
@@ -1174,7 +1178,7 @@ const EnergyReportTab: React.FC = () => {
         fetchMonthlyInverterEnergy(user.token, prevYearNum, prevMonthNum, site).catch(() => []),
       ]);
 
-      const touConfig = getTouConfig(site, month);
+      const touConfig = getTouConfig(site, month, year);
       const included = calculateTouCharges(hourlyGrid, touConfig);
       const excluded = loadPoints ? calculateTouCharges(loadPoints, touConfig) : null;
       const demand = peakKva != null || touConfig.fixedDemandChargeExclVat != null || touConfig.minimumDemandKva != null

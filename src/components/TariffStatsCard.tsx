@@ -237,16 +237,20 @@ const TariffStatsCard: React.FC = () => {
   // Whether we can fetch real data: must be signed in and on a specific site
   const canFetchLive = !!user?.token && (siteId === 'parc-du-cap' || siteId === 'centurion');
   const [, selectedMonthStr] = selectedKey.split('-');
+  const selectedYear = parseInt(selectedKey.split('-')[0], 10);
   const selectedMonth = parseInt(selectedMonthStr, 10);
   const tariffSite = siteId === 'centurion' || siteId === 'parc-du-cap' ? siteId : 'parc-du-cap';
-  const activeTouConfig = Number.isNaN(selectedMonth) ? TOU_CONFIG_BY_SITE[tariffSite] : getTouConfig(tariffSite, selectedMonth);
+  const activeTouConfig = Number.isNaN(selectedMonth) || Number.isNaN(selectedYear)
+    ? TOU_CONFIG_BY_SITE[tariffSite]
+    : getTouConfig(tariffSite, selectedMonth, selectedYear);
   const seasonLabel = activeTouConfig.season === 'winter'
     ? tariffSite === 'centurion' ? 'Winter' : 'High demand'
     : tariffSite === 'centurion' ? 'Summer' : 'Low demand';
   const seasonTitle = activeTouConfig.season === 'winter'
     ? 'June-August high-demand season'
     : 'September-May low-demand season';
-  const tariffLabel = siteId === 'all' ? `PDC tariff shown for ${siteLabel}` : `${siteLabel} tariff`;
+  const tariffLabel = (siteId === 'all' ? `PDC tariff shown for ${siteLabel}` : `${siteLabel} tariff`)
+    + (activeTouConfig.tariffYearLabel ? ` · ${activeTouConfig.tariffYearLabel}` : '');
   const classificationTitle = `${activeTouConfig.touClassificationLabel}\nPeriods: ${activeTouConfig.touPeriodSourceLabel}`;
 
   useEffect(() => {
@@ -274,7 +278,7 @@ const TariffStatsCard: React.FC = () => {
       fetchMonthlyLoadEnergyHourly(user.token, year, month, siteArg).catch(() => null as null),
     ])
       .then(([hourlyPoints, peakKva, loadPoints]) => {
-        const touConfig = getTouConfig(siteArg, month);
+        const touConfig = getTouConfig(siteArg, month, year);
         setLiveBreakdown(calculateTouCharges(hourlyPoints, touConfig));
         if (peakKva != null) {
           setDemandBreakdown(calculateDemandCharge(peakKva, touConfig));

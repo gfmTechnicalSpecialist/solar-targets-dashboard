@@ -57,6 +57,39 @@ export const CENTURION_SERVICE_CHARGE_EXCL_VAT = 4_321.63;
 export const CENTURION_SERVICE_CHARGE_INCL_VAT = 4_969.87;
 
 /**
+ * City of Tshwane 2026/27 municipal electricity tariff increase (+8.8%),
+ * effective 1 July 2026 (start of the new financial year).
+ */
+export const TSHWANE_TARIFF_INCREASE_RATE = 0.088;
+export const TSHWANE_TARIFF_INCREASE_START_YEAR = 2026;
+export const TSHWANE_TARIFF_INCREASE_START_MONTH = 7; // July, 1-based
+
+/**
+ * True when the Tshwane 2026/27 tariff (applied from 1 July 2026) is in effect
+ * for the given year/month. Months before that use the 2025/26 rates.
+ */
+export function isTshwane2026_27TariffActive(year: number, month: number): boolean {
+  return (
+    year > TSHWANE_TARIFF_INCREASE_START_YEAR ||
+    (year === TSHWANE_TARIFF_INCREASE_START_YEAR && month >= TSHWANE_TARIFF_INCREASE_START_MONTH)
+  );
+}
+
+/** Escalate a TOU rate set by the 2026/27 Tshwane municipal increase. */
+const escalateTouRates = (rates: TouRates): TouRates => ({
+  peak: +(rates.peak * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(4),
+  standard: +(rates.standard * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(4),
+  offpeak: +(rates.offpeak * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(4),
+});
+
+/** Centurion 2026/27 monthly demand charge rate (R/kVA) — escalated 8.8%. */
+export const CENTURION_DEMAND_RATE_PER_KVA_2026_27 = +(CENTURION_DEMAND_RATE_PER_KVA * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(2);
+
+/** Centurion 2026/27 fixed monthly service charge — escalated 8.8%. */
+export const CENTURION_SERVICE_CHARGE_EXCL_VAT_2026_27 = +(CENTURION_SERVICE_CHARGE_EXCL_VAT * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(2);
+export const CENTURION_SERVICE_CHARGE_INCL_VAT_2026_27 = +(CENTURION_SERVICE_CHARGE_INCL_VAT * (1 + TSHWANE_TARIFF_INCREASE_RATE)).toFixed(2);
+
+/**
  * CoCT 2025/26 MV TOU fixed monthly service charge.
  * Billed regardless of consumption (Large Power Users — TOU category).
  * Source: City of Cape Town Service Charges schedule.
@@ -108,6 +141,8 @@ export interface TouConfig {
   fixedDemandChargeExclVat?: number;
   minimumDemandKva?: number;
   season?: TouSeason;
+  /** Financial year the applied rates belong to, e.g. '2025/26' or '2026/27 (8.8% increase from 1 Jul 2026)'. */
+  tariffYearLabel?: string;
   touClassificationLabel: string;
   touPeriodSourceLabel: string;
 }
@@ -161,6 +196,22 @@ export const CENTURION_TOU_RATES_BY_SEASON: Record<TouSeason, TouRates> = {
 
 /** Centurion summer SEM TOU rates (R/kWh). */
 export const CENTURION_TOU_RATES: TouRates = CENTURION_TOU_RATES_BY_SEASON.summer;
+
+/** Centurion 2026/27 SEM TOU rates (R/kWh) — 2025/26 rates plus the approved 8.8% increase. */
+export const CENTURION_TOU_RATES_BY_SEASON_2026_27: Record<TouSeason, TouRates> = {
+  summer: escalateTouRates(CENTURION_TOU_RATES_BY_SEASON.summer),
+  winter: escalateTouRates(CENTURION_TOU_RATES_BY_SEASON.winter),
+};
+
+/**
+ * Centurion TOU rates by season for a given month — 2026/27 escalated rates are
+ * used from 1 July 2026 onward; earlier months retain the 2025/26 schedule.
+ */
+export function getCenturionTouRatesBySeason(year: number, month: number): Record<TouSeason, TouRates> {
+  return isTshwane2026_27TariffActive(year, month)
+    ? CENTURION_TOU_RATES_BY_SEASON_2026_27
+    : CENTURION_TOU_RATES_BY_SEASON;
+}
 
 /** South African municipal high-demand season is Jun-Aug; Centurion SEM labels this winter. */
 export function getTouSeasonForMonth(month: number): TouSeason {
@@ -226,6 +277,7 @@ export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
       { label: 'Network capacity', rate: PDC_NETWORK_CAPACITY_RATE_PER_KVA_NMD, unit: 'R/kVA NMD' },
     ],
     season: 'summer',
+    tariffYearLabel: '2025/26',
     touPeriodSourceLabel: 'City of Cape Town 2025/26 MV TOU periods',
   },
   centurion: {
@@ -236,20 +288,32 @@ export const TOU_CONFIG_BY_SITE: Record<TouSiteId, TouConfig> = {
     serviceChargeInclVat: CENTURION_SERVICE_CHARGE_INCL_VAT,
     minimumDemandKva: CENTURION_MINIMUM_DEMAND_KVA,
     season: 'summer',
+    tariffYearLabel: '2025/26',
     touClassificationLabel: '11 kV Supply Scale: Time of Use',
     touPeriodSourceLabel: 'Current Eskom Municflex periods',
   },
 };
 
-export function getTouConfig(siteId: TouSiteId, month = new Date().getMonth() + 1): TouConfig {
+export function getTouConfig(
+  siteId: TouSiteId,
+  month = new Date().getMonth() + 1,
+  year = new Date().getFullYear(),
+): TouConfig {
   const season = getTouSeasonForMonth(month);
 
   if (siteId === 'centurion') {
+    const tariffActive = isTshwane2026_27TariffActive(year, month);
     return {
       ...TOU_CONFIG_BY_SITE.centurion,
-      rates: CENTURION_TOU_RATES_BY_SEASON[season],
+      rates: getCenturionTouRatesBySeason(year, month)[season],
       classify: season === 'winter' ? classifyCenturionHighDemandTouPeriod : classifyCenturionLowDemandTouPeriod,
       season,
+      demandRatePerKva: tariffActive ? CENTURION_DEMAND_RATE_PER_KVA_2026_27 : CENTURION_DEMAND_RATE_PER_KVA,
+      serviceChargeExclVat: tariffActive ? CENTURION_SERVICE_CHARGE_EXCL_VAT_2026_27 : CENTURION_SERVICE_CHARGE_EXCL_VAT,
+      serviceChargeInclVat: tariffActive ? CENTURION_SERVICE_CHARGE_INCL_VAT_2026_27 : CENTURION_SERVICE_CHARGE_INCL_VAT,
+      tariffYearLabel: tariffActive
+        ? '2026/27 (8.8% increase applied from 1 Jul 2026)'
+        : '2025/26',
     };
   }
 
