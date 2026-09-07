@@ -30,7 +30,7 @@ const HIGH_DEMAND_SCHEDULE: DaySchedule[] = [
     { period: 'Off-Peak', hours: '22:00-06:00' },
   ]},
   { day: 'Saturday', rows: [
-    { period: 'Standard', hours: '07:00-12:00, 16:00-19:00' },
+    { period: 'Standard', hours: '07:00-12:00, 17:00-19:00' },
     { period: 'Off-Peak', hours: 'all other hours' },
   ]},
   { day: 'Sunday', rows: [
