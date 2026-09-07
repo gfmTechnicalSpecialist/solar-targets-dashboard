@@ -397,9 +397,9 @@ const ByDayTab: React.FC = () => {
         {below && payload?.weatherEmoji && (
           <text
             x={cx}
-            y={cy - 12}
+            y={14}
             textAnchor="middle"
-            fontSize={13}
+            fontSize={16}
             style={{ pointerEvents: 'none' }}
           >
             {payload.weatherEmoji}
@@ -1007,7 +1007,7 @@ const ByDayTab: React.FC = () => {
             /* ── DAILY IRRADIANCE COMPOSED CHART ── */
             <div>
               <ResponsiveContainer width="100%" height={340}>
-                <ComposedChart data={irradianceWithWeather} margin={{ bottom: 40, top: 24 }}>
+                <ComposedChart data={irradianceWithWeather} margin={{ bottom: 40, top: 28 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                   <XAxis
                     dataKey="dateLabel"
