@@ -394,6 +394,17 @@ const ByDayTab: React.FC = () => {
           stroke={below ? 'var(--bg-card, #fff)' : 'none'}
           strokeWidth={below ? 1.5 : 0}
         />
+        {below && payload?.weatherEmoji && (
+          <text
+            x={cx}
+            y={cy - 12}
+            textAnchor="middle"
+            fontSize={13}
+            style={{ pointerEvents: 'none' }}
+          >
+            {payload.weatherEmoji}
+          </text>
+        )}
       </g>
     );
   };
@@ -996,7 +1007,7 @@ const ByDayTab: React.FC = () => {
             /* ── DAILY IRRADIANCE COMPOSED CHART ── */
             <div>
               <ResponsiveContainer width="100%" height={340}>
-                <ComposedChart data={irradianceWithWeather} margin={{ bottom: 40 }}>
+                <ComposedChart data={irradianceWithWeather} margin={{ bottom: 40, top: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                   <XAxis
                     dataKey="dateLabel"
