@@ -1051,15 +1051,6 @@ const ByDayTab: React.FC = () => {
                     label={{ value: 'kWh/m²', angle: 90, position: 'insideRight', style: { fill: 'var(--chart-production)', fontSize: 11 } }}
                   />
                   <Tooltip content={<IrradianceTooltip />} />
-                  {avgIrradiance !== null && (
-                    <ReferenceLine
-                      yAxisId="irr"
-                      y={avgIrradiance}
-                      stroke="var(--chart-target)"
-                      strokeWidth={1.5}
-                      strokeDasharray="8 4"
-                    />
-                  )}
                   <Bar yAxisId="kwh" dataKey="productionKwh" name="Solar Production" fill="var(--chart-solar)" opacity={0.85} radius={[3, 3, 0, 0]} />
                   <Line yAxisId="irr" dataKey="trend" name="7-day trend" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} activeDot={false} />
                   <Line yAxisId="irr" dataKey="irradiance" name="Irradiance (GHI)" stroke="var(--chart-production)" strokeWidth={2.5} dot={IrradianceDot} activeDot={{ r: 5 }} />
