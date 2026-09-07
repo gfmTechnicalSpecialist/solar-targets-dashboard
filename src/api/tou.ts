@@ -234,7 +234,7 @@ export function classifyCenturionLowDemandTouPeriod(sastHour: number, dayOfWeek:
  *   Off-Peak: 22:00–06:00
  *
  * Saturday:
- *   Standard: 07:00–12:00 and 18:00–20:00
+ *   Standard: 07:00–12:00 and 16:00–19:00
  *   Off-Peak: all other hours
  *
  * Sunday:
@@ -248,7 +248,7 @@ export function classifyCenturionHighDemandTouPeriod(sastHour: number, dayOfWeek
   }
 
   if (dayOfWeek === 6) {
-    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 18 && sastHour < 20)) return 'standard';
+    if ((sastHour >= 7 && sastHour < 12) || (sastHour >= 16 && sastHour < 19)) return 'standard';
     return 'offpeak';
   }
 
