@@ -9,7 +9,6 @@ import {
   Moon,
   Star,
   Sun,
-  Cpu,
   X,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -23,11 +22,10 @@ import ByDayTab from './ByDayTab';
 import ByMonthTab from './ByMonthTab';
 import AllTimeTab from './AllTimeTab';
 import CsvDownloadTab from './CsvDownloadTab';
-import EngineeringView from './EngineeringView';
 import EnergyReportTab from './EnergyReportTab';
 import TariffStatsCard from './TariffStatsCard';
 import TouInfoButton from './TouInfoButton';
-type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Engineering' | 'Energy Report';
+type NavTab = 'Dashboard' | 'Today' | 'By Month' | 'All Time' | 'CSV Download' | 'Energy Report';
 
 type CardId =
   | 'solar-metrics'
@@ -71,12 +69,6 @@ const Dashboard: React.FC = () => {
       items: [
         { label: 'Dashboard' as NavTab, icon: LayoutDashboard },
         { label: 'Today' as NavTab, icon: Star },
-      ],
-    },
-    {
-      label: 'Technical',
-      items: [
-        { label: 'Engineering' as NavTab, icon: Cpu },
       ],
     },
     {
@@ -152,23 +144,6 @@ const Dashboard: React.FC = () => {
                     >
                       <Icon size={14} />
                       <span>{item.label}</span>
-                      {item.label === 'Engineering' && (
-                        <span style={{
-                          marginLeft: 'auto',
-                          fontSize: '0.55rem',
-                          fontWeight: 800,
-                          letterSpacing: 0.8,
-                          background: 'rgba(245,158,11,0.18)',
-                          color: '#f59e0b',
-                          border: '1px solid rgba(245,158,11,0.45)',
-                          borderRadius: 3,
-                          padding: '1px 5px',
-                          lineHeight: 1.6,
-                          textTransform: 'uppercase',
-                        }}>
-                          DEV
-                        </span>
-                      )}
                     </button>
                   );
                 })}
@@ -217,7 +192,6 @@ const Dashboard: React.FC = () => {
           {activeTab === 'All Time' && <AllTimeTab />}
           {activeTab === 'Energy Report' && <EnergyReportTab />}
           {activeTab === 'CSV Download' && <CsvDownloadTab />}
-          {activeTab === 'Engineering' && <EngineeringView />}
 
           {activeTab === 'Dashboard' && (
             <>
