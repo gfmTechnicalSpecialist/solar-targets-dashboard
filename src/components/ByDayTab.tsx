@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { fetchDailyProduction, fetchDailyIrradiance, type DailyProductionPoint, type DailyIrradiancePoint } from '../api/higeco';
+import { fetchDailyWeather, classifyWeatherCode, describeWeather, type DailyWeatherPoint } from '../api/weather';
 import targetsConfig from '../data/targets.json';
 
 function isWeekend(dateStr: string): boolean {
@@ -90,6 +91,17 @@ interface WeeklyIrradiancePoint {
   days: number;
 }
 
+interface IrradianceChartPoint {
+  dateLabel: string;
+  date: string;
+  productionKwh: number;
+  irradiance: number;
+  trend: number;
+  belowTrend: boolean;
+  weatherLabel?: string;
+  weatherEmoji?: string;
+}
+
 function aggregateWeeklyIrradiance(
   irradianceData: { dateLabel: string; date: string; productionKwh: number; irradiance: number }[],
 ): WeeklyIrradiancePoint[] {
@@ -134,6 +146,7 @@ const ByDayTab: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState(defaults.endDate);
   const [data, setData] = useState<DailyProductionPoint[]>([]);
   const [irradianceRaw, setIrradianceRaw] = useState<DailyIrradiancePoint[]>([]);
+  const [weatherByDate, setWeatherByDate] = useState<Map<string, DailyWeatherPoint>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -195,8 +208,25 @@ const ByDayTab: React.FC = () => {
         result = prod;
         irrResult = irr;
       }
+      // Public weather data (Open-Meteo) for Bellville — Parc du Cap only, best-effort.
+      let weatherMap = new Map<string, DailyWeatherPoint>();
+      if (siteId === 'parc-du-cap' && irrResult && irrResult.length > 0) {
+        try {
+          const dates = irrResult.map((p) => p.date).sort();
+          const first = dates[0];
+          const last = dates[dates.length - 1];
+          if (first && last) {
+            const weather = await fetchDailyWeather(first, last);
+            weatherMap = new Map(weather.map((w) => [w.date, w]));
+          }
+        } catch {
+          // Weather is supplementary — never block the main load.
+        }
+      }
+
       setData(result);
       setIrradianceRaw(irrResult ?? []);
+      setWeatherByDate(weatherMap);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -256,6 +286,38 @@ const ByDayTab: React.FC = () => {
   }));
   const hasIrradiance = irradianceRaw.length > 0;
 
+  // ── Weather-aware irradiance enrichment (Parc du Cap / Bellville) ──
+  // Trend = centred 7-day moving average (falls back to the period average).
+  const irradianceWithWeather = useMemo<IrradianceChartPoint[]>(() => {
+    const n = irradianceData.length;
+    if (n === 0) return [];
+    const periodAvg = irradianceData.reduce((s, d) => s + d.irradiance, 0) / n;
+    const trendOf = (i: number): number => {
+      if (n < 7) return periodAvg;
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - 3); j <= Math.min(n - 1, i + 3); j++) {
+        sum += irradianceData[j].irradiance;
+        count++;
+      }
+      return count > 0 ? sum / count : periodAvg;
+    };
+    return irradianceData.map((d, i) => {
+      const trend = Math.round(trendOf(i) * 100) / 100;
+      const belowTrend = d.irradiance < trend;
+      const w = weatherByDate.get(d.date);
+      return {
+        ...d,
+        trend,
+        belowTrend,
+        weatherLabel: w ? describeWeather(w) : undefined,
+        weatherEmoji: w ? classifyWeatherCode(w.weatherCode).emoji : undefined,
+      };
+    });
+  }, [irradianceData, weatherByDate]);
+
+  const belowTrendDays = irradianceWithWeather.filter((d) => d.belowTrend);
+
   // Irradiance summary stats
   const avgIrradiance = hasIrradiance && irradianceRaw.length > 0
     ? Math.round(irradianceRaw.reduce((s, d) => s + d.irradianceKwhM2, 0) / irradianceRaw.length * 100) / 100
@@ -296,17 +358,44 @@ const ByDayTab: React.FC = () => {
 
   const IrradianceTooltip = ({ active, payload, label }: any) => {
     if (active && payload?.length) {
-      const prod = payload.find((p: any) => p.dataKey === 'productionKwh')?.value ?? 0;
-      const irr = payload.find((p: any) => p.dataKey === 'irradiance')?.value ?? 0;
+      const row = payload[0]?.payload as IrradianceChartPoint | undefined;
+      const prod = row?.productionKwh ?? 0;
+      const irr = row?.irradiance ?? 0;
       return (
         <div className="custom-tooltip">
           <p className="tooltip-title">{label}</p>
           <p style={{ color: 'var(--chart-solar)' }}>Solar Production: {Math.round(prod)} kWh</p>
           <p style={{ color: 'var(--chart-production)' }}>Irradiance (GHI): {irr} kWh/m²</p>
+          {row != null && (
+            <p style={{ color: 'var(--text-secondary)' }}>7-day trend: {row.trend.toFixed(2)} kWh/m²</p>
+          )}
+          {row?.belowTrend && (
+            <p style={{ color: 'var(--danger)', fontWeight: 600 }}>
+              {row.weatherEmoji ?? '⚠️'} Below trend — {row.weatherLabel ?? 'weather data unavailable'}
+            </p>
+          )}
         </div>
       );
     }
     return null;
+  };
+
+  const IrradianceDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (cx == null || cy == null) return <g />;
+    const below = payload?.belowTrend === true;
+    return (
+      <g>
+        <circle
+          cx={cx}
+          cy={cy}
+          r={below ? 5 : 3}
+          fill={below ? 'var(--danger)' : 'var(--chart-production)'}
+          stroke={below ? 'var(--bg-card, #fff)' : 'none'}
+          strokeWidth={below ? 1.5 : 0}
+        />
+      </g>
+    );
   };
 
   const WeeklyIrradianceTooltip = ({ active, payload, label }: any) => {
@@ -907,7 +996,7 @@ const ByDayTab: React.FC = () => {
             /* ── DAILY IRRADIANCE COMPOSED CHART ── */
             <div>
               <ResponsiveContainer width="100%" height={340}>
-                <ComposedChart data={irradianceData} margin={{ bottom: 40 }}>
+                <ComposedChart data={irradianceWithWeather} margin={{ bottom: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                   <XAxis
                     dataKey="dateLabel"
@@ -951,8 +1040,18 @@ const ByDayTab: React.FC = () => {
                     label={{ value: 'kWh/m²', angle: 90, position: 'insideRight', style: { fill: 'var(--chart-production)', fontSize: 11 } }}
                   />
                   <Tooltip content={<IrradianceTooltip />} />
+                  {avgIrradiance !== null && (
+                    <ReferenceLine
+                      yAxisId="irr"
+                      y={avgIrradiance}
+                      stroke="var(--chart-target)"
+                      strokeWidth={1.5}
+                      strokeDasharray="8 4"
+                    />
+                  )}
                   <Bar yAxisId="kwh" dataKey="productionKwh" name="Solar Production" fill="var(--chart-solar)" opacity={0.85} radius={[3, 3, 0, 0]} />
-                  <Line yAxisId="irr" dataKey="irradiance" name="Irradiance (GHI)" stroke="var(--chart-production)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--chart-production)' }} activeDot={{ r: 5 }} />
+                  <Line yAxisId="irr" dataKey="trend" name="7-day trend" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} activeDot={false} />
+                  <Line yAxisId="irr" dataKey="irradiance" name="Irradiance (GHI)" stroke="var(--chart-production)" strokeWidth={2.5} dot={IrradianceDot} activeDot={{ r: 5 }} />
                 </ComposedChart>
               </ResponsiveContainer>
               <div className="chart-legend" style={{ marginTop: 12 }}>
@@ -964,7 +1063,50 @@ const ByDayTab: React.FC = () => {
                   <div className="legend-line" style={{ backgroundColor: 'var(--chart-production)' }} />
                   <span>Solar Irradiance — GHI (kWh/m²)</span>
                 </div>
+                <div className="legend-item">
+                  <div className="legend-line" style={{ backgroundColor: 'var(--text-muted)', opacity: 0.9 }} />
+                  <span>7-day Irradiance Trend</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ backgroundColor: 'var(--danger)', opacity: 0.9 }} />
+                  <span>Below trend (weather shown)</span>
+                </div>
               </div>
+
+              {siteId === 'parc-du-cap' && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+                    Weather on below-trend days — Bellville · Open-Meteo
+                  </div>
+                  {belowTrendDays.length === 0 ? (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No below-trend days in this period.</span>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {belowTrendDays.map((d) => (
+                        <span
+                          key={d.date}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'var(--surface-hover)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: '0.75rem',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <span aria-hidden>{d.weatherEmoji ?? '🌐'}</span>
+                          <span style={{ fontWeight: 600 }}>{d.dateLabel}</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>{d.weatherLabel ?? 'No weather data'}</span>
+                          <span style={{ color: 'var(--chart-production)', fontWeight: 600 }}>{d.irradiance} ↓ {d.trend}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </article>
