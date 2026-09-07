@@ -63,7 +63,14 @@ function toIsoDate(d: Date): string {
 async function requestOpenMeteo(url: string): Promise<DailyWeatherPoint[]> {
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Open-Meteo request failed (HTTP ${res.status})`);
+    let reason = '';
+    try {
+      const body = (await res.json()) as { reason?: string };
+      reason = body.reason ? ` — ${body.reason}` : '';
+    } catch {
+      // Response body was not JSON.
+    }
+    throw new Error(`Open-Meteo request failed (HTTP ${res.status})${reason}`);
   }
   const json = (await res.json()) as OpenMeteoDailyResponse;
   const daily = json.daily;
@@ -97,7 +104,7 @@ export async function fetchDailyWeather(startDate: string, endDate: string): Pro
   if (endDate >= cutoffIso) {
     const forecastStart = startDate >= cutoffIso ? startDate : cutoffIso;
     try {
-      const url = `${FORECAST_API_URL}?${common}&start_date=${forecastStart}&end_date=${endDate}&forecast_days=1`;
+      const url = `${FORECAST_API_URL}?${common}&start_date=${forecastStart}&end_date=${endDate}`;
       for (const p of await requestOpenMeteo(url)) byDate.set(p.date, p);
     } catch (err) {
       failures.push(err);
